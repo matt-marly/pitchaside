@@ -21,7 +21,7 @@ import {
   type RsvpBoard,
 } from '@/lib/api';
 import { formatAccountNumber, frequencyShort, paymentShareText } from '@/lib/billing';
-import { CountUpNaira } from '@/components/motion';
+import { CountUp, CountUpNaira, LiveDot, stagger } from '@/components/motion';
 import { Sheet } from '@/components/sheet';
 import { ConfirmSheet } from '@/components/match-day/confirm-sheet';
 import { useToast } from '@/components/toast';
@@ -211,10 +211,10 @@ export function ShirtRow({ payments, max = 28 }: { payments: ISessionWithDetails
   const shown = extra ? sorted.slice(0, max - 1) : sorted.slice(0, max);
   return (
     <div className="grid grid-cols-[repeat(14,minmax(0,1fr))] gap-x-1 gap-y-0.5" aria-hidden>
-      {shown.map((p) => {
+      {shown.map((p, i) => {
         const st = gameStatusOf(p);
         return (
-          <svg key={p.id} viewBox="0 0 48 48" className="w-full h-auto">
+          <svg key={p.id} viewBox="0 0 48 48" className="w-full h-auto animate-pop-in" style={stagger(i, 25, 250)}>
             <path
               d={SHIRT_PATH}
               fill={st === PaymentStatus.PAID ? '#d4f53c' : st === PaymentStatus.WAIVED ? 'rgba(255,255,255,0.25)' : 'transparent'}
@@ -455,7 +455,7 @@ export function MoneyCard({
         </p>
         {updatedAt && (
           <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/55">
-            <span className="w-1.5 h-1.5 rounded-full bg-volt-400 animate-pulse-soft" aria-hidden />
+            <LiveDot />
             Updated {now - updatedAt < 60_000 ? 'just now' : ago(new Date(updatedAt).toISOString(), now).toLowerCase()}
           </p>
         )}
@@ -463,39 +463,53 @@ export function MoneyCard({
         {/* The ticker: what's come in lately, newest on top */}
         {ticker.length > 0 && (
           <ul className="mt-3 rounded-2xl bg-white/[0.06] divide-y divide-white/[0.07] overflow-hidden" aria-label="Latest transfers">
-            {ticker.map((t) => {
+            {ticker.map((t, i) => {
               const landed = fresh.has(t.id);
               const unmatched = t.status === 'unmatched';
+              const name = transferName(t);
               const row = (
                 <>
+                  <span
+                    className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-extrabold ${
+                      unmatched ? 'bg-sun-400/15 text-sun-400 ring-1 ring-sun-400/40' : 'bg-volt-400/15 text-volt-300'
+                    }`}
+                    aria-hidden
+                  >
+                    {unmatched ? '?' : name.charAt(0)}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className={`block truncate text-[13px] font-bold ${unmatched ? 'text-white/75' : 'text-white'}`}>{name}</span>
+                    {unmatched ? (
+                      <span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-bold text-sun-400">
+                        <LiveDot className="bg-sun-400" />
+                        Who paid this?
+                      </span>
+                    ) : (
+                      <span className="block text-[11px] font-semibold text-white/45 tabular-nums">{ago(t.receivedAt, now)}</span>
+                    )}
+                  </span>
                   <span className={`font-display text-[15px] font-extrabold tabular-nums shrink-0 ${unmatched ? 'text-sun-400' : 'text-volt-300'}`}>
                     {hidden ? '+₦•••' : `+${formatCurrency(t.amount)}`}
                   </span>
-                  <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-white">
-                    {unmatched ? <span className="text-white/60">{transferName(t)}</span> : transferName(t)}
-                  </span>
-                  {unmatched ? (
-                    <span className="shrink-0 inline-flex items-center gap-1 text-[12px] font-bold text-sun-400">
-                      Who paid this?
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                      </svg>
-                    </span>
-                  ) : (
-                    <span className="shrink-0 text-[11px] font-semibold text-white/50 tabular-nums">{ago(t.receivedAt, now)}</span>
+                  {unmatched && (
+                    <svg className="w-3.5 h-3.5 shrink-0 text-sun-400 animate-nudge" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                    </svg>
                   )}
                 </>
               );
               // Two animations can't share one element: the row slides in, its slot washes volt.
-              const cls = `flex items-center gap-3 px-3.5 ${unmatched ? 'min-h-11' : 'min-h-10'} ${landed ? 'animate-land' : ''}`;
+              const cls = `flex items-center gap-3 px-3 py-2 min-h-[52px] ${landed ? 'animate-land' : 'animate-rise'}`;
               return (
                 <li key={t.id} className={landed ? 'animate-glow' : undefined}>
                   {unmatched ? (
-                    <Link href={`${transfersHref}&transfer=${t.id}`} className={`${cls} hover:bg-white/5`}>
+                    <Link href={`${transfersHref}&transfer=${t.id}`} className={`${cls} press hover:bg-white/5`} style={landed ? undefined : stagger(i, 70, 120)}>
                       {row}
                     </Link>
                   ) : (
-                    <div className={cls}>{row}</div>
+                    <div className={cls} style={landed ? undefined : stagger(i, 70, 120)}>
+                      {row}
+                    </div>
                   )}
                 </li>
               );
@@ -585,13 +599,18 @@ function GameSection({
   const heading = phase === 'matchday' ? 'Match day' : phase === 'after' ? (days === -1 ? "Yesterday's game" : 'Last game') : 'Next game';
   const chip = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days > 1 ? `In ${days} days` : game.status === 'completed' ? 'Ended' : 'Not ended yet';
   const gameHref = `/sessions/${game.id}`;
+  const notEnded = phase === 'after' && game.status !== 'completed';
 
-  const stats = [
-    `${paid.length} paid`,
-    owing.length ? `${owing.length} to pay` : null,
-    rsvp?.requireRsvp ? `${rsvp.in.length}/${rsvp.capacity} in` : null,
-    rsvp?.requireRsvp && rsvp.waitlist.length ? `${rsvp.waitlist.length} waiting` : null,
-  ].filter(Boolean);
+  // Three numbers worth a glance, each a shortcut to the list behind it.
+  const tiles: { label: string; value: number; of?: number; tone: string; href: string }[] = [
+    { label: 'Paid', value: paid.length, tone: 'text-volt-300', href: `${gameHref}?tab=payments` },
+    { label: 'To pay', value: owing.length, tone: owing.length ? 'text-sun-400' : 'text-white', href: `${gameHref}?tab=payments` },
+    rsvp?.requireRsvp
+      ? rsvp.waitlist.length && rsvp.in.length >= rsvp.capacity
+        ? { label: `In · ${rsvp.waitlist.length} waiting`, value: rsvp.in.length, of: rsvp.capacity, tone: 'text-white', href: `${gameHref}?tab=teams` }
+        : { label: 'In', value: rsvp.in.length, of: rsvp.capacity, tone: 'text-white', href: `${gameHref}?tab=teams` }
+      : { label: 'Squad', value: payments.length, tone: 'text-white', href: `${gameHref}?tab=teams` },
+  ];
 
   return (
     <div>
@@ -604,10 +623,12 @@ function GameSection({
           </p>
         </div>
         <span
-          className={`shrink-0 mt-1 text-[11px] font-extrabold px-2.5 py-1 rounded-full whitespace-nowrap ${
-            phase === 'matchday' ? 'bg-volt-400 text-ink' : 'bg-white/10 text-white/80'
+          className={`shrink-0 mt-1 inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2.5 py-1 rounded-full whitespace-nowrap animate-pop-in ${
+            phase === 'matchday' ? 'bg-volt-400 text-ink' : notEnded ? 'bg-sun-400/15 text-sun-400' : 'bg-white/10 text-white/80'
           }`}
         >
+          {phase === 'matchday' && <LiveDot className="bg-ink" />}
+          {notEnded && <LiveDot className="bg-sun-400" />}
           {chip}
         </span>
       </Link>
@@ -623,6 +644,9 @@ function GameSection({
           <>
             <CountUpNaira value={collected} className="font-display text-[28px] font-extrabold leading-none" />
             <span className="text-sm text-white/55 tabular-nums">of {formatCurrency(target)}</span>
+            <span className="ml-auto self-center text-xs font-extrabold text-volt-300 tabular-nums">
+              <CountUp value={Math.round(pct(collected))} />%
+            </span>
           </>
         )}
       </div>
@@ -633,7 +657,7 @@ function GameSection({
         </p>
       )}
       <div
-        className="mt-3 relative h-2 w-full rounded-full bg-white/12 overflow-hidden"
+        className="mt-3 relative h-2.5 w-full rounded-full bg-white/12 overflow-hidden"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -641,9 +665,9 @@ function GameSection({
         aria-label="Collected for this game"
       >
         {coveredByDues ? (
-          <div className="h-full bg-volt-400 rounded-full transition-[width] duration-500" style={{ width: `${duesPct}%` }} />
+          <div className="h-full bg-volt-400 rounded-full transition-[width] duration-500 origin-left animate-fill-grow" style={{ width: `${duesPct}%` }} />
         ) : (
-          <div className="flex h-full">
+          <div className="flex h-full origin-left animate-fill-grow">
             <div className="h-full bg-volt-400 transition-[width] duration-500" style={{ width: `${pct(byTransfer)}%` }} />
             <div className="h-full bg-volt-300/50 transition-[width] duration-500" style={{ width: `${pct(byHand)}%` }} />
           </div>
@@ -656,16 +680,22 @@ function GameSection({
         <ShirtRow payments={payments} />
       </div>
 
-      {stats.length > 0 && (
-        <p className="mt-3 text-[13px] text-white/70 tabular-nums">
-          {stats.map((s, i) => (
-            <span key={i}>
-              {i > 0 && <span className="text-white/45" aria-hidden> · </span>}
-              <span className={i === 0 ? 'text-white font-bold' : ''}>{s}</span>
+      <div className="mt-3.5 grid grid-cols-3 gap-2">
+        {tiles.map((t, i) => (
+          <Link
+            key={t.label}
+            href={t.href}
+            style={stagger(i, 60, 200)}
+            className="press animate-rise rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] px-3 py-2.5 transition-colors"
+          >
+            <span className={`block font-display text-xl font-extrabold leading-none tabular-nums ${t.tone}`}>
+              <CountUp value={t.value} />
+              {t.of != null && <span className="text-sm text-white/45">/{t.of}</span>}
             </span>
-          ))}
-        </p>
-      )}
+            <span className="mt-1 block text-[11px] font-bold text-white/60">{t.label}</span>
+          </Link>
+        ))}
+      </div>
 
       <PrimaryAction phase={phase} game={game} owing={owing.length} canManage={canManage} reminding={reminding} onRemind={onRemind} />
       {/* A played game nobody ended: voting only opens once it is */}
@@ -673,7 +703,7 @@ function GameSection({
         <button
           onClick={onEnd}
           disabled={ending}
-          className="mt-2.5 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl border border-white/20 text-[15px] font-extrabold text-white hover:bg-white/10 active:scale-[0.98] disabled:opacity-60 transition"
+          className="press mt-2.5 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl border border-white/20 text-[15px] font-extrabold text-white hover:bg-white/10 disabled:opacity-60 transition-colors"
         >
           <TickIcon />
           {ending ? 'Ending the game…' : 'End game'}
@@ -684,7 +714,10 @@ function GameSection({
 }
 
 const primaryCls =
-  'mt-4 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl bg-volt-400 text-ink text-[15px] font-extrabold hover:bg-volt-300 active:scale-[0.98] disabled:opacity-60 transition';
+  'press relative overflow-hidden mt-4 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl bg-volt-400 text-ink text-[15px] font-extrabold hover:bg-volt-300 disabled:opacity-60 transition-colors';
+
+/** The light band that sweeps across the main button every few seconds. */
+const Shine = () => <span className="shine-band animate-shine" aria-hidden />;
 
 /** One thing to do, and it changes with the week: collect, play, settle up. */
 function PrimaryAction({
@@ -706,6 +739,7 @@ function PrimaryAction({
   if (phase === 'matchday') {
     return (
       <Link href={`${href}?tab=teams`} className={primaryCls}>
+        <Shine />
         Start match day
         <Chevron />
       </Link>
@@ -714,11 +748,13 @@ function PrimaryAction({
   if (phase === 'after') {
     return owing > 0 ? (
       <Link href={`${href}?tab=payments`} className={primaryCls}>
+        <Shine />
         See what&apos;s still owed
         <Chevron />
       </Link>
     ) : (
       <Link href={`${href}?tab=stars`} className={primaryCls}>
+        <Shine />
         Open the vote
         <Chevron />
       </Link>
@@ -727,6 +763,7 @@ function PrimaryAction({
   if (owing > 0 && canManage) {
     return (
       <button onClick={onRemind} disabled={reminding} className={primaryCls}>
+        <Shine />
         <BellIcon />
         {reminding ? 'Sending reminders…' : `Remind ${owing} unpaid`}
       </button>
@@ -741,7 +778,7 @@ function PrimaryAction({
 }
 
 const Chevron = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
+  <svg className="w-4 h-4 animate-nudge" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
   </svg>
 );
