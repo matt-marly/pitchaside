@@ -3,14 +3,13 @@
 import Link from 'next/link';
 import { formatCurrency, type ISessionWithDetails } from '@/lib/api';
 import { daysFromToday, gameDay, gameMoney } from '@/components/money-card';
-import { stagger } from '@/components/motion';
 import { prettyTime } from '@/components/player-ui';
 
 type Tone = 'live' | 'warn' | 'calm' | 'done' | 'off';
 const toneCls: Record<Tone, string> = {
   live: 'bg-volt-300 text-ink',
   warn: 'bg-sun-400/25 text-amber-800',
-  calm: 'bg-chalk text-gray-700 border border-gray-200',
+  calm: 'bg-chalk text-gray-700',
   done: 'bg-ink text-white',
   off: 'bg-kit-500/15 text-kit-600',
 };
@@ -30,7 +29,7 @@ export function gameChip(s: ISessionWithDetails): { text: string; tone: Tone } {
   return { text: days === 1 ? 'Tomorrow' : `In ${days} days`, tone: 'calm' };
 }
 
-function GameRow({ s, targetPlayers, kickoff, i }: { s: ISessionWithDetails; targetPlayers: number; kickoff?: string | null; i: number }) {
+function GameRow({ s, targetPlayers, kickoff }: { s: ISessionWithDetails; targetPlayers: number; kickoff?: string | null }) {
   const chip = gameChip(s);
   const { payments, paid, owing } = gameMoney(s);
   const collected = Number(s.collectedAmount);
@@ -56,10 +55,10 @@ function GameRow({ s, targetPlayers, kickoff, i }: { s: ISessionWithDetails; tar
   const money = `${formatCurrency(collected)} paid of ${formatCurrency(played || s.kind === 'dues' ? collected + owed : Number(s.targetAmount))}`;
 
   return (
-    <li className="animate-rise" style={stagger(i, 40)}>
+    <li>
       <Link
         href={`/sessions/${s.id}`}
-        className="press block bg-white px-4 py-3.5 rounded-2xl border border-gray-100 shadow-card hover:border-gray-300 transition-colors"
+        className="press block px-1 py-3.5 rounded-xl hover:bg-chalk transition-colors"
       >
         <div className="flex items-center justify-between gap-2">
           <p className="text-[15px] font-bold text-ink">
@@ -102,7 +101,6 @@ export function GamesList({
   const past = sessions
     .filter((s) => !ahead.includes(s))
     .sort((a, b) => gameDay(b.date).getTime() - gameDay(a.date).getTime());
-  let n = 0;
   return (
     <div className="space-y-5">
       {[
@@ -112,12 +110,12 @@ export function GamesList({
         .filter((g) => g.list.length)
         .map((g) => (
           <section key={g.title}>
-            <h3 className="px-1 mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-600">
-              {g.title} <span className="text-gray-500">· {g.list.length}</span>
+            <h3 className="px-1 mb-2 font-display text-[17px] font-extrabold text-ink">
+              {g.title} <span className="text-gray-400 tabular-nums">{g.list.length}</span>
             </h3>
-            <ul className="space-y-2">
+            <ul className="-mx-1 divide-y divide-gray-100">
               {g.list.map((s) => (
-                <GameRow key={s.id} s={s} targetPlayers={targetPlayers} kickoff={kickoff} i={n++} />
+                <GameRow key={s.id} s={s} targetPlayers={targetPlayers} kickoff={kickoff} />
               ))}
             </ul>
           </section>

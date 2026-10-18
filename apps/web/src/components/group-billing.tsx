@@ -7,8 +7,9 @@ import { useToast } from '@/components/toast';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Sheet } from '@/components/sheet';
 import { EmptyState } from '@/components/empty-state';
-import { BallIcon } from '@/components/illustrations';
+import { BallIcon, kitFor } from '@/components/illustrations';
 import { SheetTitle } from '@/components/home/sheet-title';
+import { transferName } from '@/components/home/transfers-sheet';
 import {
   acceptTransferClaim,
   assignTransfer,
@@ -445,10 +446,10 @@ function TransferDayList({ days, children }: { days: TransferDay[]; children: (t
       {days.map((day) => (
         <section key={day.label}>
           <div className="flex items-baseline justify-between px-1 mb-1.5">
-            <h3 className="text-xs font-extrabold text-gray-500">{day.label}</h3>
-            <span className="text-[11px] font-bold text-gray-500 tabular-nums">In {formatCurrency(day.total)}</span>
+            <h3 className="text-[13px] font-bold text-gray-600">{day.label}</h3>
+            <span className="text-[13px] font-semibold text-gray-500 tabular-nums">{formatCurrency(day.total)}</span>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-card divide-y divide-gray-100 overflow-hidden text-left">
+          <div className="-mx-4 divide-y divide-gray-100 text-left">
             {day.items.map((t) => (
               <div key={t.id} id={`transfer-${t.id}`} className="scroll-mt-24">
                 {children(t)}
@@ -482,19 +483,19 @@ function TransferRow({
       aria-expanded={expanded}
     >
       <span className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0 ${status.avatar}`}>
-        {initials(t.senderName || who)}
+        {t.status === 'unmatched' ? '?' : initials(t.senderName || who)}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-bold text-ink line-clamp-2 break-words">Transfer from {t.senderName || who || 'unknown sender'}</span>
-        <span className="block text-[11px] text-gray-500 mt-0.5 truncate">
+        <span className="block text-[15px] font-bold text-ink truncate">{transferName(t)}</span>
+        <span className="block text-[13px] text-gray-600 mt-0.5 truncate">
           {new Date(t.receivedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-          {who && t.status !== 'unmatched' ? ` · ${who}` : ''}
+          {t.status === 'unmatched' && t.narration ? `, “${t.narration}”` : ''}
         </span>
       </span>
       <span className="text-right shrink-0">
         <span
-          className={`block text-sm font-extrabold tabular-nums ${
-            t.status === 'ignored' ? 'text-gray-400 line-through' : 'text-pitch-600'
+          className={`block font-display text-[15px] font-extrabold tabular-nums ${
+            t.status === 'ignored' ? 'text-gray-400 line-through' : t.status === 'unmatched' ? 'text-amber-700' : 'text-pitch-600'
           }`}
         >
           +{formatCurrency(Number(t.amount))}
@@ -780,48 +781,6 @@ export function TransfersPanel({
         }}
         onCancel={() => setIgnoring(null)}
       />
-      {mockMode && (
-        <form onSubmit={handleSimulate} className="bg-sky-300/30 border-2 border-dashed border-sky-300 rounded-3xl p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <BallIcon className="w-5 h-5" />
-            <p className="text-sm font-bold text-ink">Test mode: simulate a bank transfer</p>
-          </div>
-          <p className="text-xs text-gray-600 -mt-1">
-            Payrep MFB is running in mock mode. Put a member&apos;s payment reference (e.g. PA7K3FQ) in the narration, or use their full name as the sender.
-          </p>
-          <div className="grid grid-cols-[110px_1fr] gap-2">
-            <input
-              type="number"
-              min={1}
-              value={sim.amount}
-              onChange={(e) => setSim({ ...sim, amount: e.target.value })}
-              className={input}
-              aria-label="Amount"
-            />
-            <input
-              placeholder="Sender name"
-              value={sim.senderName}
-              onChange={(e) => setSim({ ...sim, senderName: e.target.value })}
-              className={input}
-            />
-          </div>
-          <div className="flex gap-2">
-            <input
-              placeholder="Narration / reference"
-              value={sim.narration}
-              onChange={(e) => setSim({ ...sim, narration: e.target.value })}
-              className={input}
-            />
-            <button
-              type="submit"
-              disabled={simulating || !Number(sim.amount)}
-              className="px-4 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-50 whitespace-nowrap transition-colors"
-            >
-              {simulating ? 'Sending…' : 'Send'}
-            </button>
-          </div>
-        </form>
-      )}
 
       {webhookStatus && !webhookStatus.ok && (
         <div className="bg-red-50 border border-red-200 rounded-3xl p-4 space-y-2">
@@ -837,33 +796,34 @@ export function TransfersPanel({
         </div>
       )}
 
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-card p-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-gray-500">Transfer history</p>
-            <p className="font-display text-2xl font-extrabold text-ink tabular-nums mt-1">{formatCurrency(received)}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              received in {counted.length} transfer{counted.length === 1 ? '' : 's'}
-            </p>
-          </div>
+      <div>
+        <div className="flex items-end justify-between gap-3">
+          <h2 className="font-display text-[22px] font-extrabold text-ink leading-none">Money in</h2>
           <button
             onClick={() => setShowRecord(!showRecord)}
-            className="px-3 py-2 text-xs font-bold text-ink bg-white border border-gray-200 rounded-xl hover:border-ink transition-colors whitespace-nowrap"
+            aria-expanded={showRecord}
+            className="press -mr-2 -mb-2 h-11 px-2 text-[15px] font-bold text-pitch-600 hover:text-pitch-700 whitespace-nowrap"
           >
-            {showRecord ? 'Close' : '+ Record a missed transfer'}
+            {showRecord ? 'Close' : 'Record a missed one'}
           </button>
         </div>
+        <p className="mt-1.5 text-[13px] text-gray-600 tabular-nums">
+          {formatCurrency(received)} from {counted.length} transfer{counted.length === 1 ? '' : 's'}
+        </p>
         {transfers.length > 0 && (
-          <div className="flex gap-2 mt-4">
+          <div role="radiogroup" aria-label="Show transfers" className="mt-3 flex p-1 rounded-xl bg-chalk">
             {(['all', 'unmatched'] as const).map((f) => (
               <button
                 key={f}
+                role="radio"
+                aria-checked={activeFilter === f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-full transition-colors ${
-                  activeFilter === f ? 'bg-ink text-volt-300' : 'bg-gray-100 text-gray-600 hover:text-ink'
+                className={`press flex-1 min-h-9 rounded-lg text-[13px] font-bold transition-colors duration-200 ${
+                  activeFilter === f ? 'bg-white text-ink shadow-card' : 'text-gray-600 hover:text-ink'
                 }`}
               >
-                {f === 'all' ? 'All' : `Needs matching (${unmatchedCount})`}
+                {f === 'all' ? 'All' : 'To match'}{' '}
+                <span className="tabular-nums text-gray-400">{f === 'all' ? counted.length : unmatchedCount}</span>
               </button>
             ))}
           </div>
@@ -984,6 +944,50 @@ export function TransfersPanel({
           }}
         </TransferDayList>
       )}
+
+      {/* Test setups only (PULSE_MODE=mock): never shown to real organisers */}
+      {mockMode && (
+        <form onSubmit={handleSimulate} className="bg-sky-300/30 border-2 border-dashed border-sky-300 rounded-3xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <BallIcon className="w-5 h-5" />
+            <p className="text-sm font-bold text-ink">Test mode: simulate a bank transfer</p>
+          </div>
+          <p className="text-xs text-gray-600 -mt-1">
+            Payrep MFB is running in mock mode. Put a member&apos;s payment reference (e.g. PA7K3FQ) in the narration, or use their full name as the sender.
+          </p>
+          <div className="grid grid-cols-[110px_1fr] gap-2">
+            <input
+              type="number"
+              min={1}
+              value={sim.amount}
+              onChange={(e) => setSim({ ...sim, amount: e.target.value })}
+              className={input}
+              aria-label="Amount"
+            />
+            <input
+              placeholder="Sender name"
+              value={sim.senderName}
+              onChange={(e) => setSim({ ...sim, senderName: e.target.value })}
+              className={input}
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+              placeholder="Narration / reference"
+              value={sim.narration}
+              onChange={(e) => setSim({ ...sim, narration: e.target.value })}
+              className={input}
+            />
+            <button
+              type="submit"
+              disabled={simulating || !Number(sim.amount)}
+              className="px-4 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-50 whitespace-nowrap transition-colors"
+            >
+              {simulating ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -1077,10 +1081,10 @@ function MatchPlayerSheet({
   const first = choice?.name.split(' ')[0];
   const from = transfer.senderName || 'an unknown sender';
 
-  const list = (title: string, rows: typeof ranked) =>
+  const list = (title: string, rows: typeof ranked, showWhat = true) =>
     rows.length > 0 && (
-      <section className="mt-4">
-        <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-600">{title}</h3>
+      <section key={title} className="mt-4">
+        <h3 className="mb-1 text-[13px] font-bold text-gray-600">{title}</h3>
         <ul className="-mx-2" role="radiogroup" aria-label={title}>
           {rows.map(({ o, reasons }) => {
             const on = picked === o.id;
@@ -1094,24 +1098,23 @@ function MatchPlayerSheet({
                     on ? 'bg-volt-300/50' : 'hover:bg-chalk'
                   }`}
                 >
-                  <span className="w-9 h-9 shrink-0 rounded-full bg-chalk text-ink text-xs font-extrabold flex items-center justify-center" aria-hidden>
-                    {initials(o.name)}
+                  <span className={`w-9 h-9 shrink-0 rounded-full ${kitFor(o.name).bg} ${kitFor(o.name).fg} text-sm font-extrabold font-display flex items-center justify-center`} aria-hidden>
+                    {o.name.charAt(0)}
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-bold text-ink truncate">
+                    <span className="block text-[15px] font-bold text-ink truncate">
                       {o.name}
-                      {o.nickname ? <span className="font-semibold text-gray-500"> · {o.nickname}</span> : null}
+                      {o.nickname ? <span className="font-semibold text-gray-500"> “{o.nickname}”</span> : null}
                     </span>
-                    <span className="block text-xs text-gray-600 truncate">
-                      Owes {formatCurrency(o.amount)} for {o.what}
-                    </span>
-                    {reasons.length > 0 && (
-                      <span className="mt-1 flex flex-wrap gap-1">
-                        {reasons.map((r) => (
-                          <span key={r} className="px-1.5 py-0.5 rounded-md bg-volt-300 text-[10px] font-extrabold text-ink">
-                            {r}
+                    {(showWhat || reasons.length > 0) && (
+                      <span className="block text-[13px] text-gray-600 truncate">
+                        {showWhat && `Owes ${formatCurrency(o.amount)} for ${o.what}`}
+                        {reasons.length > 0 && (
+                          <span className="font-bold text-pitch-600">
+                            {showWhat ? ', ' : ''}
+                            {reasons.join(', ').toLowerCase().replace(/^./, (c) => (showWhat ? c : c.toUpperCase()))}
                           </span>
-                        ))}
+                        )}
                       </span>
                     )}
                   </span>
@@ -1140,8 +1143,10 @@ function MatchPlayerSheet({
             <div className="mb-3 rounded-2xl bg-chalk px-3.5 py-2.5 text-[13px] text-ink" aria-live="polite">
               <p className="font-bold">All {formatCurrency(Number(transfer.amount))} goes to {choice.name}</p>
               <p className="text-gray-700 mt-0.5">
-                {outcome.paid.length ? `Pays ${outcome.paid.map((x) => x.what).join(', ')}` : `Not enough for a full due yet`}
-                {outcome.credit > 0 ? ` · ${formatCurrency(outcome.credit)} kept as ${first}'s credit` : ''}
+                {outcome.paid.length
+                  ? `Pays ${outcome.paid.map((x) => x.what).join(' and ')}.`
+                  : 'Not enough for a whole due yet.'}
+                {outcome.credit > 0 ? ` ${formatCurrency(outcome.credit)} stays as ${first}'s credit.` : ''}
               </p>
               {Number(transfer.amount) >= choice.amount * 2 && (
                 <p className="mt-1 text-[12px] text-amber-800">Paying for a friend too? The app can&apos;t split one transfer yet, so it all counts for {first}.</p>
@@ -1174,8 +1179,17 @@ function MatchPlayerSheet({
           className="mt-4 w-full h-11 px-3.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
         />
       )}
-      {list('Likely', likely)}
-      {list(likely.length ? 'Everyone else who owes' : 'Everyone who owes', rest)}
+      {list('Most likely', likely)}
+      {/* Everyone else, under the game they owe for, so the date and amount are said once */}
+      {[...new Set(rest.map((r) => r.o.what))].map((what) => {
+        const rows = rest.filter((r) => r.o.what === what);
+        const amounts = [...new Set(rows.map((r) => r.o.amount))];
+        return list(
+          `${what}${amounts.length === 1 ? `, owes ${formatCurrency(amounts[0])}` : ''}`,
+          rows,
+          amounts.length > 1,
+        );
+      })}
       {ranked.length === 0 && <p className="mt-6 text-sm text-gray-600 text-center">No one by that name owes right now.</p>}
     </Sheet>
   );
