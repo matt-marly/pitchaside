@@ -19,6 +19,7 @@ import {
   type IGroupWithMembers,
   type ISessionWithDetails,
   type RsvpBoard,
+  type SessionVoting,
 } from '@/lib/api';
 import { formatAccountNumber, frequencyShort, paymentShareText } from '@/lib/billing';
 import { CountUp, CountUpNaira, LiveDot, stagger } from '@/components/motion';
@@ -59,22 +60,28 @@ export function phaseOf(game: ISessionWithDetails): GamePhase {
 }
 
 /**
- * The game the home page is about this week: yesterday's or the day before's game while
- * it's still being settled, otherwise the next one still to be played.
+ * The game the home card is about. A game on today wins. Otherwise last game stays while it needs
+ * the organiser: not ended yet (up to a week back), or ended in the last two days while its vote is
+ * on. Once it's ended and that's passed, or the next game is tomorrow, the card moves on to the
+ * next game.
  */
 export function featuredGame(sessions: ISessionWithDetails[], groupId: string) {
   const games = sessions.filter((s) => s.groupId === groupId && s.kind !== 'dues' && s.status !== 'cancelled');
+  const next = games
+    .filter((s) => s.status === 'upcoming' && daysFromToday(s.date) >= 0)
+    .sort((a, b) => gameDay(a.date).getTime() - gameDay(b.date).getTime())[0];
+  if (next && daysFromToday(next.date) <= 1) return next;
   const recent = games
     .filter((s) => {
       const d = daysFromToday(s.date);
-      return d >= -2 && d <= -1;
+      return d < 0 && (s.status !== 'completed' ? d >= -VOTE_DAYS : d >= -2);
     })
     .sort((a, b) => gameDay(b.date).getTime() - gameDay(a.date).getTime())[0];
-  if (recent) return recent;
-  return games
-    .filter((s) => s.status === 'upcoming' && daysFromToday(s.date) >= 0)
-    .sort((a, b) => gameDay(a.date).getTime() - gameDay(b.date).getTime())[0];
+  return recent ?? next;
 }
+
+/** Votes stay open for a week after the game (VOTING_WINDOW_DAYS on the server). */
+const VOTE_DAYS = 7;
 
 function ago(iso: string, now: number) {
   const mins = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60_000));
@@ -300,6 +307,7 @@ export function MoneyCard({
   onScheduleGame,
   onOpenAccount,
   onGameEnded,
+  vote,
 }: {
   group: IGroupWithMembers;
   money: ReturnType<typeof useGroupMoney>;
@@ -311,6 +319,8 @@ export function MoneyCard({
   onOpenAccount: () => void;
   /** Called once a game is ended from the card, so the page can update its copy. */
   onGameEnded?: (gameId: string) => void;
+  /** The featured game's vote, if it has one. */
+  vote?: SessionVoting | null;
 }) {
   const toast = useToast();
   const now = useNow();
@@ -382,7 +392,7 @@ export function MoneyCard({
     setEnding(true);
     try {
       await updateSessionStatus(game.id, 'completed');
-      toast.success('Game ended. Voting is open.');
+      toast.success('Game ended. Vote links sent.');
       onGameEnded?.(game.id);
       money.reload();
     } catch {
@@ -506,7 +516,7 @@ export function MoneyCard({
         {hasAccount && balance && transfers && (
           <div className="mt-4 grid grid-cols-[1fr_1fr_auto] rounded-2xl bg-white/[0.06] divide-x divide-white/[0.08]">
             {[
-              { label: 'Received today', value: hidden ? '₦•••' : formatCurrency(todayIn) },
+              { label: 'Today', value: hidden ? '₦•••' : formatCurrency(todayIn) },
               { label: 'Total received', value: hidden ? '₦•••' : formatCurrency(Number(balance.totalIn)) },
               { label: 'Transfers in', value: transfersCount },
             ].map((f, i) => (
@@ -517,7 +527,7 @@ export function MoneyCard({
                 className="press animate-rise min-w-0 flex flex-col justify-start px-2.5 py-2.5 text-left hover:bg-white/[0.05] first:rounded-l-2xl last:rounded-r-2xl transition-colors"
               >
                 <span className="block text-[14px] font-bold text-white/90 tabular-nums tracking-tight whitespace-nowrap">{f.value}</span>
-                <span className="block mt-0.5 text-[11px] font-bold leading-tight text-white/65">{f.label}</span>
+                <span className="block mt-0.5 text-[11px] font-bold leading-tight text-white/65 whitespace-nowrap truncate">{f.label}</span>
               </button>
             ))}
           </div>
@@ -642,6 +652,7 @@ export function MoneyCard({
             onEnd={() => setConfirmEnd(true)}
             open={gameOpen}
             onToggle={toggleGame}
+            vote={vote}
           />
         ) : (
           <div>
@@ -661,9 +672,9 @@ export function MoneyCard({
       </div>
       <ConfirmSheet
         open={confirmEnd}
-        title="End the game and open the vote?"
-        message="Every player gets a link to vote for Player of the Match. Players who still owe can carry on paying, and you can reopen the game later."
-        confirmLabel="End & open vote"
+        title="End this game?"
+        message="Every player gets the link to vote for Player of the Match. Anyone who still owes can carry on paying, and you can reopen the game later."
+        confirmLabel="End game"
         cancelLabel="Not yet"
         onConfirm={endGame}
         onCancel={() => setConfirmEnd(false)}
@@ -689,6 +700,7 @@ function GameSection({
   onEnd,
   open,
   onToggle,
+  vote,
 }: {
   game: ISessionWithDetails;
   rsvp: RsvpBoard | null;
@@ -699,6 +711,8 @@ function GameSection({
   onEnd: () => void;
   open: boolean;
   onToggle: () => void;
+  /** This game's vote, when the page has it: open or closed, and how many have voted. */
+  vote?: SessionVoting | null;
 }) {
   const bodyId = useId();
   const phase = phaseOf(game);
@@ -712,7 +726,18 @@ function GameSection({
   const kickoff = game.kickoffTime || game.group?.kickoffTime;
   const when = gameDay(game.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   const heading = phase === 'matchday' ? 'Match day' : phase === 'after' ? (days === -1 ? "Yesterday's game" : 'Last game') : 'Next game';
-  const chip = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days > 1 ? `In ${days} days` : game.status === 'completed' ? 'Ended' : 'Vote not open';
+  // One word or two for where the game is: before, on the day, waiting to be ended, voting, done.
+  const voteOn = !!vote?.open;
+  const status: { text: string; tone: 'live' | 'warn' | 'calm'; dot: boolean } =
+    days === 0
+      ? { text: 'Today', tone: 'live', dot: true }
+      : days > 0
+        ? { text: days === 1 ? 'Tomorrow' : `In ${days} days`, tone: 'calm', dot: false }
+        : game.status !== 'completed'
+          ? { text: 'Not ended', tone: 'warn', dot: true }
+          : voteOn
+            ? { text: `Voting · ${vote!.ballots}/${vote!.squadSize}`, tone: 'live', dot: true }
+            : { text: 'Final', tone: 'calm', dot: false };
   const gameHref = `/sessions/${game.id}`;
   const notEnded = phase === 'after' && game.status !== 'completed';
 
@@ -744,21 +769,20 @@ function GameSection({
     <div>
       <div className="flex items-center gap-2">
       <Link href={gameHref} className="group flex-1 min-w-0 -mx-1 px-1 py-0.5 rounded-xl">
-        <span className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/65">{heading}</span>
+        <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-white/65">{heading}</span>
+        <span className="mt-1 flex items-center gap-2 min-w-0">
+          <span className="text-sm font-semibold text-white leading-tight truncate group-hover:text-volt-300 transition-colors">
+            {when}
+            {kickoff ? ` · ${prettyTime(kickoff)}` : ''}
+          </span>
           <span
-            className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap animate-pop-in ${
-              phase === 'matchday' ? 'bg-volt-400 text-ink' : notEnded ? 'bg-sun-400/15 text-sun-400' : 'bg-white/10 text-white/80'
+            className={`shrink-0 inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-bold whitespace-nowrap animate-pop-in ${
+              status.tone === 'live' ? 'bg-volt-400/15 text-volt-300' : status.tone === 'warn' ? 'bg-sun-400/15 text-sun-400' : 'bg-white/[0.08] text-white/75'
             }`}
           >
-            {phase === 'matchday' && <LiveDot className="bg-ink" />}
-            {notEnded && <LiveDot className="bg-sun-400" />}
-            {chip}
+            {status.dot && <LiveDot className={status.tone === 'warn' ? 'bg-sun-400' : 'bg-volt-400'} />}
+            {status.text}
           </span>
-        </span>
-        <span className="block text-sm font-semibold text-white leading-tight mt-0.5 group-hover:text-volt-300 transition-colors">
-          {when}
-          {kickoff ? ` · ${prettyTime(kickoff)}` : ''}
         </span>
       </Link>
       <CollapseButton open={open} onClick={onToggle} controls={bodyId} label="game details" onDark />
@@ -854,7 +878,7 @@ function GameSection({
           }
         >
           <TickIcon />
-          {ending ? 'Ending the game…' : 'End game & open the vote'}
+          {ending ? 'Ending the game…' : 'End game & send vote link'}
         </button>
       )}
     </div>
@@ -972,12 +996,19 @@ export function AccountDetailsSheet({
   const toast = useToast();
   const [showQr, setShowQr] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
+  const [copiedNumber, setCopiedNumber] = useState(false);
   const account = billing.account;
   if (!account) return null;
 
   const copy = (text: string, label: string) =>
     navigator.clipboard.writeText(text).then(
-      () => toast.success(`${label} copied`),
+      () => {
+        if (text === account?.accountNumber) {
+          setCopiedNumber(true);
+          window.setTimeout(() => setCopiedNumber(false), 1800);
+        }
+        toast.success(`${label} copied`);
+      },
       () => toast.error('Could not copy. Press and hold to copy it instead.'),
     );
   const shareText = paymentShareText({
@@ -1013,7 +1044,14 @@ export function AccountDetailsSheet({
           <span className="font-display text-[26px] font-extrabold tracking-[0.04em] tabular-nums text-volt-300">
             {formatAccountNumber(account.accountNumber)}
           </span>
-          <span className="text-[12px] font-bold text-white/80 inline-flex items-center gap-1">Tap to copy</span>
+          <span
+            className={`shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-[12px] font-bold transition-colors ${
+              copiedNumber ? 'bg-volt-400 text-ink' : 'bg-white/10 text-white'
+            }`}
+          >
+            {copiedNumber ? <TickSmall /> : <CopySmall />}
+            {copiedNumber ? 'Copied' : 'Copy'}
+          </span>
         </span>
         <span className="relative block text-xs text-white/60 mt-1 truncate">{account.accountName}</span>
       </button>

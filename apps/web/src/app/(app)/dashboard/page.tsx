@@ -459,6 +459,7 @@ export default function Dashboard() {
           canManage={canManage}
           onScheduleGame={() => setShowNewGame(true)}
           onOpenAccount={() => setShowAccount(true)}
+          vote={voting && voting.sessionId === liveGame?.id ? voting.data : null}
           onGameEnded={(id) =>
             setSessions((all) => all.map((s) => (s.id === id ? { ...s, status: SessionStatus.COMPLETED } : s)))
           }
