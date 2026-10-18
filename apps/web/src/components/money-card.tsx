@@ -23,6 +23,7 @@ import {
 import { formatAccountNumber, frequencyShort, paymentShareText } from '@/lib/billing';
 import { CountUp, CountUpNaira, LiveDot, stagger } from '@/components/motion';
 import { Sheet } from '@/components/sheet';
+import { TransfersSheet, transferName } from '@/components/home/transfers-sheet';
 import { ConfirmSheet } from '@/components/match-day/confirm-sheet';
 import { useToast } from '@/components/toast';
 import { prettyTime } from '@/components/player-ui';
@@ -198,10 +199,10 @@ const SHIRT_PATH = 'M14 6 L19 4 Q24 8 29 4 L34 6 L45 13 L40 22 L35 19 L35 44 L13
 
 /**
  * One shirt per player, filled when paid and dashed while they owe — the squad board from
- * the game page, laid out as two rows of 14 so a 28-a-side squad fits a phone.
+ * the game page, in one row (paid first, then "+N") so it reads at a glance on a small phone.
  * TODO(shared): the game page draws the same shirts inline; it could use this too.
  */
-export function ShirtRow({ payments, max = 28 }: { payments: ISessionWithDetails['payments']; max?: number }) {
+export function ShirtRow({ payments, max = 12 }: { payments: ISessionWithDetails['payments']; max?: number }) {
   const list = payments ?? [];
   if (!list.length) return null;
   // Paid first so the row fills from the left like the bar above it.
@@ -210,7 +211,7 @@ export function ShirtRow({ payments, max = 28 }: { payments: ISessionWithDetails
   const extra = sorted.length > max ? sorted.length - (max - 1) : 0;
   const shown = extra ? sorted.slice(0, max - 1) : sorted.slice(0, max);
   return (
-    <div className="grid grid-cols-[repeat(14,minmax(0,1fr))] gap-x-1 gap-y-0.5" aria-hidden>
+    <div className="grid gap-x-1.5" style={{ gridTemplateColumns: `repeat(${max}, minmax(0, 1fr))` }} aria-hidden>
       {shown.map((p, i) => {
         const st = gameStatusOf(p);
         return (
@@ -243,12 +244,6 @@ export function ShirtRow({ payments, max = 28 }: { payments: ISessionWithDetails
   );
 }
 
-function transferName(t: BankTransfer) {
-  const p = t.player ?? t.payment?.player;
-  if (p) return `${p.firstName} ${p.lastName ? `${p.lastName.charAt(0)}.` : ''}`.trim();
-  const words = (t.senderName ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 2);
-  return words.length ? words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' ') : 'Unknown sender';
-}
 
 const EyeIcon = ({ off }: { off: boolean }) => (
   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
@@ -260,12 +255,6 @@ const EyeIcon = ({ off }: { off: boolean }) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
       </>
     )}
-  </svg>
-);
-
-const BankIcon = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0 0 12 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75Z" />
   </svg>
 );
 
@@ -319,7 +308,6 @@ export function MoneyCard({
   money,
   gameFallback,
   canManage,
-  onOpenAccount,
   onScheduleGame,
   onGameEnded,
 }: {
@@ -328,7 +316,6 @@ export function MoneyCard({
   /** The game as the list endpoint returned it, shown until the live copy arrives. */
   gameFallback: ISessionWithDetails | null;
   canManage: boolean;
-  onOpenAccount: () => void;
   onScheduleGame: () => void;
   /** Called once a game is ended from the card, so the page can update its copy. */
   onGameEnded?: (gameId: string) => void;
@@ -342,12 +329,14 @@ export function MoneyCard({
   const { balance, billing, transfers, rsvp, updatedAt, balanceFailed, fresh } = money;
   const game = money.game ?? gameFallback;
 
-  const ticker = (transfers ?? [])
+  // Two rows at most: an unknown payment first (it needs them), then the newest. The rest are a tap away.
+  const recent = (transfers ?? [])
     .filter((t) => t.status !== 'ignored')
-    .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime())
-    .slice(0, 3);
+    .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+  const unknown = recent.filter((t) => t.status === 'unmatched');
+  const ticker = [...unknown.slice(0, 1), ...recent.filter((t) => t.status !== 'unmatched')].slice(0, 2);
+  const [sheet, setSheet] = useState<{ id: string | null } | null>(null);
   const hasAccount = billing ? !!billing.account : !!group.accountNumber;
-  const transfersHref = `/groups/${group.id}?tab=transfers`;
 
   async function remind() {
     if (!game) return;
@@ -392,15 +381,7 @@ export function MoneyCard({
         {/* Who this money belongs to, and the account details behind a button */}
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-semibold text-white/70 truncate min-w-0">{group.name}</p>
-          {hasAccount ? (
-            <button
-              onClick={onOpenAccount}
-              className="shrink-0 inline-flex items-center gap-1.5 h-11 -my-1.5 px-3.5 rounded-full bg-white/10 text-[13px] font-bold text-white hover:bg-white/15 transition-colors"
-            >
-              <BankIcon />
-              Account details
-            </button>
-          ) : (
+          {hasAccount ? null : (
             <Link
               href={`/groups/${group.id}`}
               className="shrink-0 inline-flex items-center h-11 -my-1.5 px-3.5 rounded-full bg-volt-400 text-[13px] font-bold text-ink"
@@ -454,7 +435,7 @@ export function MoneyCard({
                 : `${formatCurrency(Number(balance.available))} in the account`}
         </p>
         {updatedAt && (
-          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/55">
+          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/65">
             <LiveDot />
             Updated {now - updatedAt < 60_000 ? 'just now' : ago(new Date(updatedAt).toISOString(), now).toLowerCase()}
           </p>
@@ -462,7 +443,19 @@ export function MoneyCard({
 
         {/* The ticker: what's come in lately, newest on top */}
         {ticker.length > 0 && (
-          <ul className="mt-3 rounded-2xl bg-white/[0.06] divide-y divide-white/[0.07] overflow-hidden" aria-label="Latest transfers">
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-xs font-bold text-white/70">Money in</p>
+            <button
+              onClick={() => setSheet({ id: null })}
+              className="press -my-2 h-11 px-1 inline-flex items-center gap-1 text-xs font-bold text-volt-300 hover:text-volt-200"
+            >
+              See all{unknown.length > 1 ? ` · ${unknown.length} to match` : ''}
+              <Chevron />
+            </button>
+          </div>
+        )}
+        {ticker.length > 0 && (
+          <ul className="mt-1 rounded-2xl bg-white/[0.06] divide-y divide-white/[0.07] overflow-hidden" aria-label="Latest transfers">
             {ticker.map((t, i) => {
               const landed = fresh.has(t.id);
               const unmatched = t.status === 'unmatched';
@@ -485,32 +478,29 @@ export function MoneyCard({
                         Who paid this?
                       </span>
                     ) : (
-                      <span className="block text-[11px] font-semibold text-white/45 tabular-nums">{ago(t.receivedAt, now)}</span>
+                      <span className="block text-[11px] font-semibold text-white/65 tabular-nums">{ago(t.receivedAt, now)}</span>
                     )}
                   </span>
                   <span className={`font-display text-[15px] font-extrabold tabular-nums shrink-0 ${unmatched ? 'text-sun-400' : 'text-volt-300'}`}>
                     {hidden ? '+₦•••' : `+${formatCurrency(t.amount)}`}
                   </span>
-                  {unmatched && (
-                    <svg className="w-3.5 h-3.5 shrink-0 text-sun-400 animate-nudge" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                    </svg>
-                  )}
+                  <svg className={`w-3.5 h-3.5 shrink-0 ${unmatched ? 'text-sun-400 animate-nudge' : 'text-white/50'}`} fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                  </svg>
                 </>
               );
               // Two animations can't share one element: the row slides in, its slot washes volt.
               const cls = `flex items-center gap-3 px-3 py-2 min-h-[52px] ${landed ? 'animate-land' : 'animate-rise'}`;
               return (
                 <li key={t.id} className={landed ? 'animate-glow' : undefined}>
-                  {unmatched ? (
-                    <Link href={`${transfersHref}&transfer=${t.id}`} className={`${cls} press hover:bg-white/5`} style={landed ? undefined : stagger(i, 70, 120)}>
-                      {row}
-                    </Link>
-                  ) : (
-                    <div className={cls} style={landed ? undefined : stagger(i, 70, 120)}>
-                      {row}
-                    </div>
-                  )}
+                  <button
+                    onClick={() => setSheet({ id: t.id })}
+                    aria-label={`${name}, ${hidden ? 'amount hidden' : formatCurrency(t.amount)}${unmatched ? ', who paid this? Match it' : ''}. Details`}
+                    className={`${cls} w-full text-left press hover:bg-white/5`}
+                    style={landed ? undefined : stagger(i, 70, 120)}
+                  >
+                    {row}
+                  </button>
                 </li>
               );
             })}
@@ -520,6 +510,9 @@ export function MoneyCard({
           <p className="mt-4 rounded-2xl bg-white/[0.06] px-3.5 py-3 text-[13px] text-white/60">
             No transfers yet. Share the account details and they&apos;ll show up here as they land.
           </p>
+        )}
+        {sheet && transfers && (
+          <TransfersSheet transfers={transfers} groupId={group.id} hidden={hidden} openId={sheet.id} onClose={() => setSheet(null)} />
         )}
 
         <HalfwayLine />
@@ -638,15 +631,13 @@ function GameSection({
         {coveredByDues ? (
           <>
             <span className="font-display text-[28px] font-extrabold tabular-nums leading-none">{paid.length}</span>
-            <span className="text-sm text-white/55 tabular-nums">of {payments.length} paid their dues</span>
+            <span className="text-sm text-white/65 tabular-nums">of {payments.length} paid their dues</span>
           </>
         ) : (
           <>
             <CountUpNaira value={collected} className="font-display text-[28px] font-extrabold leading-none" />
-            <span className="text-sm text-white/55 tabular-nums">of {formatCurrency(target)}</span>
-            <span className="ml-auto self-center text-xs font-extrabold text-volt-300 tabular-nums">
-              <CountUp value={Math.round(pct(collected))} />%
-            </span>
+            <span className="text-sm text-white/65 tabular-nums">of {formatCurrency(target)}</span>
+
           </>
         )}
       </div>
@@ -656,8 +647,9 @@ function GameSection({
           {formatCurrency(byHand)} marked paid by hand
         </p>
       )}
+      <div className="mt-3 flex items-center gap-2.5">
       <div
-        className="mt-3 relative h-2.5 w-full rounded-full bg-white/12 overflow-hidden"
+        className="relative h-2.5 flex-1 min-w-0 rounded-full bg-white/12 overflow-hidden"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -675,6 +667,10 @@ function GameSection({
         {/* Halfway mark, like the line on the pitch */}
         <span className="absolute left-1/2 top-0 bottom-0 w-px bg-white/25" aria-hidden />
       </div>
+        <span className="shrink-0 w-10 text-right text-xs font-extrabold text-volt-300 tabular-nums">
+          <CountUp value={Math.round(coveredByDues ? duesPct : pct(collected))} />%
+        </span>
+      </div>
 
       <div className="mt-3.5">
         <ShirtRow payments={payments} />
@@ -690,9 +686,14 @@ function GameSection({
           >
             <span className={`block font-display text-xl font-extrabold leading-none tabular-nums ${t.tone}`}>
               <CountUp value={t.value} />
-              {t.of != null && <span className="text-sm text-white/45">/{t.of}</span>}
+              {t.of != null && <span className="text-sm text-white/60">/{t.of}</span>}
             </span>
-            <span className="mt-1 block text-[11px] font-bold text-white/60">{t.label}</span>
+            <span className="mt-1 flex items-center justify-between gap-1 text-[11px] font-bold text-white/70">
+              <span className="truncate">{t.label}</span>
+              <svg className="w-3 h-3 shrink-0 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+              </svg>
+            </span>
           </Link>
         ))}
       </div>

@@ -22,7 +22,6 @@ import {
   AccountDetailsSheet,
   MoneyCard,
   NeedsYou,
-  PlusIcon,
   daysFromToday,
   featuredGame,
   gameDay,
@@ -30,6 +29,10 @@ import {
   useGroupMoney,
   type NeedsItem,
 } from '@/components/money-card';
+import { InviteSheet } from '@/components/home/invite-sheet';
+import { QuickActions, InviteIcon, BankShareIcon, CalendarPlusIcon, type QuickAction } from '@/components/home/quick-actions';
+import { UpdatesBell, type Update } from '@/components/home/updates-bell';
+import { transferName } from '@/components/home/transfers-sheet';
 
 const onboardingSteps = [
   {
@@ -76,6 +79,8 @@ export default function Dashboard() {
   const [failed, setFailed] = useState(false);
   const [showNewGame, setShowNewGame] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showAllComing, setShowAllComing] = useState(false);
   // Several groups: the one picked in the switcher; until then, the one playing soonest.
   const [picked, setPicked] = useState<string | null>(null);
   const [voting, setVoting] = useState<{ sessionId: string; data: SessionVoting } | null>(null);
@@ -309,17 +314,69 @@ export default function Dashboard() {
     .sort((a, b) => gameDay(a.date).getTime() - gameDay(b.date).getTime())
     .slice(0, 4);
 
+  // The bell: everything that needs them, then what's happened lately (money in, new players).
+  const toneIcon: Record<NeedsItem['tone'], string> = {
+    kit: 'bg-kit-500 text-white',
+    sun: 'bg-sun-400 text-ink',
+    volt: 'bg-volt-300 text-ink',
+    sky: 'bg-sky-300 text-ink',
+  };
+  const bellNeeds: Update[] = needs
+    .filter((n) => n.key !== 'new')
+    .map((n) => ({ key: n.key, href: n.href, title: n.title, detail: n.detail, icon: n.icon, iconCls: toneIcon[n.tone] }));
+  const bellLatest: Update[] = [
+    ...(money.transfers ?? [])
+      .filter((t) => t.status !== 'ignored' && t.status !== 'unmatched')
+      .slice(0, 6)
+      .map((t) => ({
+        key: `t-${t.id}`,
+        href: `/groups/${group?.id}?tab=transfers`,
+        title: `${formatCurrency(t.amount)} from ${transferName(t)}`,
+        detail: new Date(t.receivedAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' }),
+        icon: <span className="font-display text-base font-extrabold">₦</span>,
+        iconCls: 'bg-volt-300 text-ink',
+        at: new Date(t.receivedAt).getTime(),
+      })),
+    ...newMembers.map((m) => ({
+      key: `m-${m.id}`,
+      href: `/groups/${group?.id}?tab=members`,
+      title: `${m.player.firstName} ${m.player.lastName} joined`,
+      detail: group?.name,
+      icon: <span className="text-sm font-extrabold">{m.player.firstName.charAt(0)}</span>,
+      iconCls: 'bg-sky-300 text-ink',
+      at: new Date(m.joinedAt).getTime(),
+    })),
+  ].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+
+  const quick: QuickAction[] = [
+    money.billing?.link ? { key: 'invite', label: 'Invite', icon: <InviteIcon />, onClick: () => setShowInvite(true) } : null,
+    money.billing?.account ? { key: 'account', label: 'Account details', icon: <BankShareIcon />, onClick: () => setShowAccount(true) } : null,
+    canManage ? { key: 'schedule', label: 'New game', icon: <CalendarPlusIcon />, onClick: () => setShowNewGame(true) } : null,
+  ].filter(Boolean) as QuickAction[];
+
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
       {/* Header */}
-      <div className="mb-3.5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-pitch-600">
-          {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </p>
-        <h1 className="text-[26px] leading-tight font-extrabold text-ink mt-0.5">
-          {greeting}, {user?.firstName || 'there'}
-        </h1>
+      <div className="mb-3.5 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-pitch-600">
+            {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          <h1 className="text-[26px] leading-tight font-extrabold text-ink mt-0.5">
+            {greeting}, {user?.firstName || 'there'}
+          </h1>
+        </div>
+        <UpdatesBell needs={bellNeeds} latest={bellLatest} />
       </div>
+      {showInvite && group && money.billing && (
+        <InviteSheet
+          group={group}
+          billing={money.billing}
+          canManage={canManage}
+          onBilling={money.setBilling}
+          onClose={() => setShowInvite(false)}
+        />
+      )}
 
       {showNewGame && (
         <NewSessionSheet
@@ -355,7 +412,6 @@ export default function Dashboard() {
           money={money}
           gameFallback={game}
           canManage={canManage}
-          onOpenAccount={() => setShowAccount(true)}
           onScheduleGame={() => setShowNewGame(true)}
           onGameEnded={(id) =>
             setSessions((all) => all.map((s) => (s.id === id ? { ...s, status: SessionStatus.COMPLETED } : s)))
@@ -363,13 +419,29 @@ export default function Dashboard() {
         />
       )}
 
-      <NeedsYou items={needs} />
+      <QuickActions actions={quick} />
+
+      {/* The top two; the rest are in the bell */}
+      <NeedsYou items={needs.filter((n) => n.key !== 'new').slice(0, 2)} />
 
       {comingUp.length > 0 && (
-        <section className="mt-6">
-          <h2 className="text-base font-bold text-ink mb-2.5">Coming up</h2>
-          <div className="space-y-2">
-            {comingUp.map((session) => {
+        <section className="mt-6" aria-labelledby="coming-up">
+          <div className="flex items-center justify-between mb-2">
+            <h2 id="coming-up" className="text-base font-bold text-ink">
+              Coming up
+            </h2>
+            {comingUp.length > 1 && (
+              <button
+                onClick={() => setShowAllComing((v) => !v)}
+                aria-expanded={showAllComing}
+                className="h-11 -my-2 px-1 text-sm font-bold text-pitch-700"
+              >
+                {showAllComing ? 'Show less' : `See all ${comingUp.length}`}
+              </button>
+            )}
+          </div>
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-card divide-y divide-gray-100 overflow-hidden">
+            {(showAllComing ? comingUp : comingUp.slice(0, 1)).map((session, i) => {
               const progress = session.targetAmount > 0
                 ? Math.round((session.collectedAmount / session.targetAmount) * 100)
                 : 0;
@@ -379,45 +451,32 @@ export default function Dashboard() {
                 <Link
                   key={session.id}
                   href={`/sessions/${session.id}`}
-                  className="flex items-center gap-4 bg-white rounded-2xl p-3 border border-gray-100 shadow-card hover:border-gray-300 transition-colors"
+                  style={{ animationDelay: `${i * 40}ms` }}
+                  className="animate-rise flex items-center gap-3 px-3 py-2.5 hover:bg-chalk transition-colors"
                 >
-                  <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-gray-200 text-center">
-                    <div className="bg-kit-500 text-ink text-[9px] font-extrabold uppercase tracking-wider py-0.5">
+                  <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 border border-gray-200 text-center">
+                    <div className="bg-kit-500 text-ink text-[9px] font-extrabold uppercase tracking-wider py-px">
                       {d.toLocaleDateString('en-GB', { month: 'short' })}
                     </div>
-                    <div className="font-display text-lg font-extrabold text-ink leading-7">{d.getDate()}</div>
+                    <div className="font-display text-base font-extrabold text-ink leading-6">{d.getDate()}</div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-ink truncate">
                       {d.toLocaleDateString('en-GB', { weekday: 'long' })}
                       {kickoff ? ` · ${prettyTime(kickoff)}` : ''}
                     </p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <div className="flex-1 max-w-[140px] bg-gray-100 rounded-full h-1.5">
-                        <div className="bg-pitch-500 h-1.5 rounded-full" style={{ width: `${Math.min(progress, 100)}%` }} />
-                      </div>
-                      <span className="text-[11px] font-semibold text-gray-500 tabular-nums">{progress}%</span>
-                    </div>
+                    <p className="text-xs text-gray-600 tabular-nums">
+                      {formatCurrency(session.collectedAmount)} of {formatCurrency(session.targetAmount)} · {progress}%
+                    </p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-ink tabular-nums">{formatCurrency(session.collectedAmount)}</p>
-                    <p className="text-[11px] text-gray-500 tabular-nums">of {formatCurrency(session.targetAmount)}</p>
-                  </div>
+                  <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                  </svg>
                 </Link>
               );
             })}
           </div>
         </section>
-      )}
-
-      {canManage && (
-        <button
-          onClick={() => setShowNewGame(true)}
-          className="mt-4 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-300 text-sm font-bold text-ink hover:border-ink hover:bg-white transition-colors"
-        >
-          <PlusIcon />
-          Schedule a game
-        </button>
       )}
     </div>
   );
