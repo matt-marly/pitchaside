@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { BackButton } from '@/components/back-button';
@@ -79,6 +79,16 @@ export default function GroupDetailPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [openMember, setOpenMember] = useState<string | null>(null);
+  // The tabs pin to the top once the page scrolls past them; this marks when they're pinned (for the shadow).
+  const tabTopRef = useRef<HTMLDivElement>(null);
+  const [tabsPinned, setTabsPinned] = useState(false);
+  useEffect(() => {
+    const el = tabTopRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setTabsPinned(!e.isIntersecting && e.boundingClientRect.top < 0));
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loading]);
   const [query, setQuery] = useState('');
   const [memberFilter, setMemberFilter] = useState<'all' | 'owes' | 'paid' | 'out'>('all');
 
@@ -592,10 +602,12 @@ export default function GroupDetailPage() {
       )}
 
       {/* Tabs: they stay at the top while a long list scrolls */}
-      <div id="group-tab-top" className="scroll-mt-0" />
+      <div id="group-tab-top" ref={tabTopRef} />
       <div
         id="group-tabs"
-        className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-[max(8px,env(safe-area-inset-top))] pb-2 mt-3 mb-3 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
+        className={`sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-[max(8px,env(safe-area-inset-top))] pb-2 mt-3 mb-3 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85 transition-shadow duration-200 ${
+          tabsPinned ? 'shadow-[0_6px_16px_-10px_rgba(15,26,20,0.35)]' : ''
+        }`}
       >
         <div role="tablist" aria-label={`${group.name} sections`} className="flex p-1 bg-white border border-gray-200 rounded-2xl">
           {tabs.map((t) => (
@@ -789,7 +801,12 @@ export default function GroupDetailPage() {
               {/* Who's paid for the next game: the same filter style as the Sessions page */}
               {nextDue && (
                 <div className="mt-3">
-                  <div role="radiogroup" aria-label={`Show the squad by payment for ${dueLabel}`} className="-mx-4 px-4 flex gap-2 overflow-x-auto [scrollbar-width:none]">
+                  <div
+                    role="radiogroup"
+                    aria-label={`Show the squad by payment for ${dueLabel}`}
+                    className="grid gap-2"
+                    style={{ gridTemplateColumns: `repeat(${outCount > 0 ? 4 : 3}, minmax(0, 1fr))` }}
+                  >
                     {(
                       [
                         { key: 'all', label: 'All', n: memberCount },
@@ -803,7 +820,7 @@ export default function GroupDetailPage() {
                         role="radio"
                         aria-checked={memberFilter === f.key}
                         onClick={() => setMemberFilter(f.key)}
-                        className={`shrink-0 h-10 px-3.5 text-[13px] font-bold rounded-full border whitespace-nowrap tabular-nums transition-colors ${
+                        className={`h-10 px-1.5 text-[13px] font-bold rounded-full border whitespace-nowrap tabular-nums transition-colors ${
                           memberFilter === f.key ? 'bg-ink border-ink text-volt-300' : 'bg-white border-gray-200 text-gray-700 hover:border-ink'
                         }`}
                       >

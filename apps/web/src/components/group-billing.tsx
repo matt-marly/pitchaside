@@ -655,7 +655,7 @@ export function TransfersPanel({
   const [showRecord, setShowRecord] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   // Unset = matching first: show what needs matching while there is any.
-  const [filter, setFilter] = useState<'all' | 'unmatched' | null>(null);
+  const [filter, setFilter] = useState<'all' | 'unmatched' | 'matched' | 'ignored' | null>(null);
   const [webhookStatus, setWebhookStatus] = useState<WebhookStatus | null>(null);
 
   useEffect(() => {
@@ -750,7 +750,24 @@ export function TransfersPanel({
   const received = counted.reduce((sum, t) => sum + Number(t.amount), 0);
   const unmatchedCount = transfers.filter((t) => t.status === 'unmatched').length;
   const activeFilter = filter ?? (unmatchedCount > 0 ? 'unmatched' : 'all');
-  const days = groupByDay(activeFilter === 'unmatched' ? transfers.filter((t) => t.status === 'unmatched') : transfers);
+  const matchedCount = transfers.filter((t) => t.status === 'matched' || t.status === 'assigned').length;
+  const ignoredCount = transfers.filter((t) => t.status === 'ignored').length;
+  const shownTransfers =
+    activeFilter === 'unmatched'
+      ? transfers.filter((t) => t.status === 'unmatched')
+      : activeFilter === 'matched'
+        ? transfers.filter((t) => t.status === 'matched' || t.status === 'assigned')
+        : activeFilter === 'ignored'
+          ? transfers.filter((t) => t.status === 'ignored')
+          : transfers;
+  const days = groupByDay(shownTransfers);
+  // Each view of the list; Ignored only once something has been ignored.
+  const views = [
+    { key: 'all' as const, label: 'All', n: transfers.length },
+    { key: 'unmatched' as const, label: 'To match', n: unmatchedCount },
+    { key: 'matched' as const, label: 'Matched', n: matchedCount },
+    ...(ignoredCount ? [{ key: 'ignored' as const, label: 'Ignored', n: ignoredCount }] : []),
+  ];
 
   return (
     <div className="space-y-3">
@@ -796,78 +813,40 @@ export function TransfersPanel({
         </div>
       )}
 
-      <div>
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-bold text-ink">Money in</h2>
-          <button
-            onClick={() => setShowRecord(!showRecord)}
-            aria-expanded={showRecord}
-            className="h-11 -my-2 px-1 text-sm font-bold text-pitch-700 whitespace-nowrap"
-          >
-            {showRecord ? 'Close' : 'Add a missing transfer'}
-          </button>
+      {/* The section heading, as on the home: a title, what it adds up to, then the views of the list */}
+      <section aria-labelledby="money-in-title" className="pt-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="money-in-title" className="text-base font-bold text-ink">
+            Money in
+          </h2>
+          <p className="text-xs font-semibold text-gray-500 tabular-nums">
+            {formatCurrency(received)} in {counted.length} transfer{counted.length === 1 ? '' : 's'}
+          </p>
         </div>
-        <p className="text-xs text-gray-500 tabular-nums">
-          {formatCurrency(received)} from {counted.length} transfer{counted.length === 1 ? '' : 's'}
-        </p>
         {transfers.length > 0 && (
-          <div role="radiogroup" aria-label="Show transfers" className="mt-3 flex gap-2">
-            {(['all', 'unmatched'] as const).map((f) => (
+          <div
+            role="radiogroup"
+            aria-label="Show transfers"
+            className="mt-2.5 grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${views.length}, minmax(0, 1fr))` }}
+          >
+            {views.map((v) => (
               <button
-                key={f}
+                key={v.key}
                 role="radio"
-                aria-checked={activeFilter === f}
-                onClick={() => setFilter(f)}
-                className={`h-10 px-3.5 text-[13px] font-bold rounded-full border whitespace-nowrap tabular-nums transition-colors ${
-                  activeFilter === f ? 'bg-ink border-ink text-volt-300' : 'bg-white border-gray-200 text-gray-700 hover:border-ink'
+                aria-checked={activeFilter === v.key}
+                onClick={() => setFilter(v.key)}
+                className={`h-10 px-2 text-[13px] font-bold rounded-full border whitespace-nowrap tabular-nums transition-colors ${
+                  activeFilter === v.key ? 'bg-ink border-ink text-volt-300' : 'bg-white border-gray-200 text-gray-700 hover:border-ink'
                 }`}
               >
-                {f === 'all' ? 'All' : 'To match'} {f === 'all' ? counted.length : unmatchedCount}
+                {v.label} {v.n}
               </button>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      {showRecord && (
-        <form onSubmit={handleRecord} className="bg-white rounded-3xl border border-gray-100 shadow-card p-4 space-y-3">
-          <p className="text-xs text-gray-500">
-            For a transfer that reached the group account but isn&apos;t listed here. Check it isn&apos;t already in the list, so it isn&apos;t counted twice.
-          </p>
-          <div className="grid grid-cols-[110px_1fr] gap-2">
-            <input
-              type="number"
-              min={1}
-              placeholder="Amount"
-              value={rec.amount}
-              onChange={(e) => setRec({ ...rec, amount: e.target.value })}
-              className={input}
-              aria-label="Amount"
-            />
-            <input
-              placeholder="Sender name"
-              value={rec.senderName}
-              onChange={(e) => setRec({ ...rec, senderName: e.target.value })}
-              className={input}
-            />
-          </div>
-          <div className="flex gap-2">
-            <input
-              placeholder="Narration / reference"
-              value={rec.narration}
-              onChange={(e) => setRec({ ...rec, narration: e.target.value })}
-              className={input}
-            />
-            <button
-              type="submit"
-              disabled={recording || !Number(rec.amount)}
-              className="px-4 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-50 whitespace-nowrap transition-colors"
-            >
-              {recording ? 'Saving…' : 'Record'}
-            </button>
-          </div>
-        </form>
-      )}
 
       {transfers.length === 0 ? (
         <EmptyState
@@ -876,7 +855,9 @@ export function TransfersPanel({
           description="When players pay into the group account, their transfers show up here and are matched automatically."
         />
       ) : days.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center py-6">Every transfer is matched.</p>
+        <p className="text-sm text-gray-500 text-center py-6">
+          {activeFilter === 'unmatched' ? 'Every transfer is matched.' : activeFilter === 'ignored' ? 'Nothing has been ignored.' : 'Nothing here yet.'}
+        </p>
       ) : (
         <TransferDayList days={days}>
           {(t) => {
@@ -942,6 +923,57 @@ export function TransfersPanel({
             );
           }}
         </TransferDayList>
+      )}
+
+
+      {/* Rare: a transfer the bank didn't send us. A quiet line under the list, not a header action */}
+      <div className="pt-1 text-center">
+        <button
+          onClick={() => setShowRecord(!showRecord)}
+          aria-expanded={showRecord}
+          className="h-11 px-2 text-sm font-semibold text-gray-600 hover:text-ink"
+        >
+          {showRecord ? 'Close' : <>Transfer missing? <span className="font-bold text-pitch-700">Add it</span></>}
+        </button>
+      </div>
+      {showRecord && (
+        <form onSubmit={handleRecord} className="bg-white rounded-3xl border border-gray-100 shadow-card p-4 space-y-3">
+          <p className="text-xs text-gray-500">
+            For a transfer that reached the group account but isn&apos;t listed here. Check it isn&apos;t already in the list, so it isn&apos;t counted twice.
+          </p>
+          <div className="grid grid-cols-[110px_1fr] gap-2">
+            <input
+              type="number"
+              min={1}
+              placeholder="Amount"
+              value={rec.amount}
+              onChange={(e) => setRec({ ...rec, amount: e.target.value })}
+              className={input}
+              aria-label="Amount"
+            />
+            <input
+              placeholder="Sender name"
+              value={rec.senderName}
+              onChange={(e) => setRec({ ...rec, senderName: e.target.value })}
+              className={input}
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+              placeholder="Narration / reference"
+              value={rec.narration}
+              onChange={(e) => setRec({ ...rec, narration: e.target.value })}
+              className={input}
+            />
+            <button
+              type="submit"
+              disabled={recording || !Number(rec.amount)}
+              className="px-4 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-50 whitespace-nowrap transition-colors"
+            >
+              {recording ? 'Saving…' : 'Record'}
+            </button>
+          </div>
+        </form>
       )}
 
       {/* Test setups only (PULSE_MODE=mock): never shown to real organisers */}
