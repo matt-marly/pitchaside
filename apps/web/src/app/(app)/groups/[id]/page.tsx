@@ -11,10 +11,8 @@ import { JerseyBadge, kitFor } from '@/components/illustrations';
 import { GroupAccountCard, TransfersPanel } from '@/components/group-billing';
 import { PayoutsPanel } from '@/components/group-payouts';
 import { NewSessionSheet } from '@/components/new-session-sheet';
-import { frequencyLabel, frequencyOptions } from '@/lib/billing';
+import { frequencyLabel } from '@/lib/billing';
 import { LeagueTableView } from '@/components/ratings';
-import { ContributionsVisibilityPicker } from '@/components/contributions-visibility';
-import { RsvpToggle } from '@/components/rsvp-toggle';
 import { AccountDetailsSheet, MoneyCard, PlusIcon, daysFromToday, gameDay, gameStatusOf, useGroupMoney } from '@/components/money-card';
 import { InviteSheet } from '@/components/home/invite-sheet';
 import { InviteIcon, ICON_PATHS, icon } from '@/components/home/quick-actions';
@@ -23,6 +21,7 @@ import { Sheet } from '@/components/sheet';
 import { btnSecondary } from '@/components/buttons';
 import { GamesList } from '@/components/group/games-list';
 import { MemberSheet, type MemberDue } from '@/components/group/member-sheet';
+import { GroupEditSheet, type GroupEditData } from '@/components/group/group-edit-sheet';
 import { useAuth } from '@/lib/auth';
 import {
   getGroup,
@@ -40,7 +39,7 @@ import {
   type ISessionWithDetails,
 } from '@/lib/api';
 import { PaymentStatus, PaymentType, UserRole } from '@pitchaside/shared';
-import type { ContributionsVisibility, IPlayer } from '@pitchaside/shared';
+import type { IPlayer } from '@pitchaside/shared';
 
 type Tab = 'members' | 'games' | 'table' | 'money';
 
@@ -104,7 +103,7 @@ export default function GroupDetailPage() {
 
   // Edit group state
   const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState({
+  const [editData, setEditData] = useState<GroupEditData>({
     name: '',
     description: '',
     location: '',
@@ -114,7 +113,7 @@ export default function GroupDetailPage() {
     feePerPlayer: 10,
     paymentType: PaymentType.PER_SESSION as string,
     requireRsvp: false,
-    contributionsVisibility: 'private' as ContributionsVisibility,
+    contributionsVisibility: 'private',
   });
   const [saving, setSaving] = useState(false);
 
@@ -211,7 +210,7 @@ export default function GroupDetailPage() {
     setEditing(true);
   }
 
-  async function handleSaveEdit() {
+  async function handleSaveEdit(editData: GroupEditData) {
     setSaving(true);
     try {
       await updateGroup(id, {
@@ -229,7 +228,7 @@ export default function GroupDetailPage() {
       const updated = await getGroup(id);
       setGroup(updated);
       setEditing(false);
-      toast.success('Group updated');
+      toast.success('Changes saved');
       refreshPayments().catch(() => {});
     } catch {
       toast.error('The changes didn’t save. Check your connection and try again.');
@@ -448,113 +447,10 @@ export default function GroupDetailPage() {
       )}
 
       {/* Header */}
-      {editing ? (
-        <div className="mb-6 bg-white border border-gray-100 shadow-card rounded-3xl p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Group name</label>
-            <input
-              value={editData.name}
-              onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-              className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Description</label>
-            <textarea
-              value={editData.description}
-              onChange={(e) => setEditData({ ...editData, description: e.target.value })}
-              rows={2}
-              className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600 resize-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Pitch location</label>
-            <input
-              value={editData.location}
-              onChange={(e) => setEditData({ ...editData, location: e.target.value })}
-              placeholder="e.g. Teslim Balogun Stadium, Surulere"
-              className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
-            />
-          </div>
-          <div className="grid grid-cols-[1fr_130px] gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">Schedule</label>
-              <input
-                value={editData.schedule}
-                onChange={(e) => setEditData({ ...editData, schedule: e.target.value })}
-                placeholder="e.g. Every Saturday"
-                className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">Kick-off</label>
-              <input
-                type="time"
-                value={editData.kickoffTime}
-                onChange={(e) => setEditData({ ...editData, kickoffTime: e.target.value })}
-                className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">Players per game</label>
-              <input
-                type="number"
-                min={1}
-                value={editData.targetPlayers}
-                onChange={(e) => setEditData({ ...editData, targetPlayers: Number(e.target.value) })}
-                className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">Fee per player (₦)</label>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={editData.feePerPlayer}
-                onChange={(e) => setEditData({ ...editData, feePerPlayer: Number(e.target.value) })}
-                className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">How players pay</label>
-            <select
-              value={editData.paymentType}
-              onChange={(e) => setEditData({ ...editData, paymentType: e.target.value })}
-              className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
-            >
-              {frequencyOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <RsvpToggle checked={editData.requireRsvp} onChange={(v) => setEditData({ ...editData, requireRsvp: v })} />
-          <ContributionsVisibilityPicker
-            value={editData.contributionsVisibility}
-            onChange={(v) => setEditData({ ...editData, contributionsVisibility: v })}
-          />
-          <div className="flex gap-3 pt-1">
-            <button
-              onClick={() => setEditing(false)}
-              className="flex-1 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveEdit}
-              disabled={saving || !editData.name.trim()}
-              className="flex-1 py-2.5 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-50 transition-colors"
-            >
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
-          </div>
-        </div>
-      ) : (
+      {editing && (
+        <GroupEditSheet initial={editData} saving={saving} onSave={handleSaveEdit} onClose={() => setEditing(false)} />
+      )}
+      {(
         <section aria-label={group.name} className="relative rounded-[28px] bg-ink text-white overflow-hidden shadow-lift">
           <div className="absolute inset-0 turf-stripes-soft" />
           <div className="relative p-5">
