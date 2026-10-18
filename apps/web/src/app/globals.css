@@ -348,3 +348,11 @@
   20% { transform: rotate(-6deg); }
   25% { transform: rotate(3deg); }
 }
+
+/* A sheet sliding back down off the screen, and its backdrop fading. */
+@keyframes sheet-out {
+  to { transform: translateY(100%); }
+}
+@keyframes fade-out {
+  to { opacity: 0; }
+}

@@ -7,6 +7,7 @@ import { Sheet } from '@/components/sheet';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useToast } from '@/components/toast';
 import { SheetTitle } from '@/components/home/sheet-title';
+import { btnPrimary, btnSecondary } from '@/components/buttons';
 
 /**
  * Bringing someone new in: the group link with Copy and WhatsApp, a QR code to scan at the
@@ -30,6 +31,8 @@ export function InviteSheet({
   const [showQr, setShowQr] = useState(false);
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Bumped on each new link so the link box washes volt again.
+  const [fresh, setFresh] = useState(0);
   const text = `Join ${group.name} on PitchAside to see when we're playing and where to pay: ${billing.link}`;
 
   const copy = () =>
@@ -43,7 +46,8 @@ export function InviteSheet({
     setBusy(true);
     try {
       onBilling(await regenerateGroupInvite(group.id));
-      toast.success('New link ready. The old one no longer works.');
+      setFresh((n) => n + 1);
+      toast.success('New link ready. Share it again: the old one no longer works.');
     } catch {
       toast.error('Could not make a new link. Try again.');
     } finally {
@@ -55,7 +59,7 @@ export function InviteSheet({
     <Sheet titleId={titleId} onClose={onClose} align="left">
       <SheetTitle id={titleId} title="Invite players" sub={`Anyone with the link can join ${group.name}`} onClose={onClose} />
 
-      <div className="mt-4 rounded-2xl bg-chalk border border-gray-200 px-3.5 py-3">
+      <div key={fresh} className={`mt-4 rounded-2xl bg-chalk border border-gray-200 px-3.5 py-3 ${fresh ? 'animate-glow' : ''}`}>
         <p className="text-[11px] font-bold text-gray-600">Group link</p>
         <p className="mt-0.5 text-sm font-semibold text-ink break-all select-all">{billing.link}</p>
       </div>
@@ -63,13 +67,13 @@ export function InviteSheet({
       <div className="grid grid-cols-2 gap-2 mt-3">
         <button
           onClick={copy}
-          className="press h-12 flex items-center justify-center gap-2 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 transition-colors"
+          className={btnPrimary}
         >
           Copy link
         </button>
         <button
           onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener')}
-          className="press h-12 flex items-center justify-center gap-2 text-sm font-bold text-ink bg-[#25D366] rounded-xl hover:brightness-95 transition"
+          className="press min-h-12 flex items-center justify-center gap-2 rounded-2xl text-[15px] font-bold text-ink bg-[#25D366] hover:brightness-95 transition"
         >
           Send on WhatsApp
         </button>
@@ -95,23 +99,24 @@ export function InviteSheet({
       )}
 
       {canManage && (
-        <div className="border-t border-gray-100 pt-3 mt-1">
-          <p className="text-xs text-gray-600">Link shared somewhere it shouldn&apos;t be?</p>
-          <button
-            onClick={() => setConfirmRegen(true)}
-            disabled={busy}
-            className="mt-1 h-11 text-sm font-bold text-kit-600 disabled:opacity-60"
-          >
-            {busy ? 'Making a new link…' : 'Make a new link'}
+        <div className="mt-2 flex items-center gap-3 rounded-2xl border border-gray-200 px-3.5 py-3">
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-bold text-ink">Reset link</span>
+            <span className="block text-xs text-gray-600 mt-0.5 leading-snug">
+              Makes a new link. The old one stops working straight away.
+            </span>
+          </span>
+          <button onClick={() => setConfirmRegen(true)} disabled={busy} className={`shrink-0 ${btnSecondary} min-h-11 px-3.5 text-sm`}>
+            {busy ? 'Resetting…' : 'Reset'}
           </button>
         </div>
       )}
 
       <ConfirmDialog
         open={confirmRegen}
-        title="Make a new group link?"
-        message="The current link will stop working. Anyone who hasn't joined yet will need the new one."
-        confirmLabel="Make new link"
+        title="Reset the group link?"
+        message="The current link stops working straight away. Anyone who hasn't joined yet will need the new one. People already in the group aren't affected."
+        confirmLabel="Reset link"
         variant="danger"
         onConfirm={regenerate}
         onCancel={() => setConfirmRegen(false)}

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { btnDanger, btnPrimary, btnSecondary } from '@/components/buttons';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -69,7 +70,7 @@ export function ConfirmDialog({
       onClick={onCancel}
     >
       <div
-        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-lift w-full sm:max-w-sm p-6 pb-[max(env(safe-area-inset-bottom),1.5rem)] sm:pb-6 animate-slide-up sm:animate-fade-in-up"
+        className="bg-white rounded-t-[28px] sm:rounded-3xl shadow-lift w-full sm:max-w-md p-6 pb-[max(env(safe-area-inset-bottom),1.5rem)] sm:pb-6 animate-slide-up sm:animate-fade-in-up"
         onClick={(e) => e.stopPropagation()}
       >
         <div className={`w-11 h-11 rounded-2xl flex items-center justify-center mb-4 ${variant === 'danger' ? 'bg-kit-500/15 text-kit-600' : 'bg-volt-300 text-ink'}`}>
@@ -83,24 +84,13 @@ export function ConfirmDialog({
             </svg>
           )}
         </div>
-        <h3 id={titleId} className="text-lg font-bold text-ink mb-1">{title}</h3>
-        <p id={messageId} className="text-sm text-gray-600 mb-5">{message}</p>
+        <h3 id={titleId} className="font-display text-xl font-extrabold text-ink leading-tight mb-1.5">{title}</h3>
+        <p id={messageId} className="text-sm text-gray-600 leading-relaxed mb-6">{message}</p>
         <div className="flex gap-3">
-          <button
-            ref={cancelRef}
-            onClick={onCancel}
-            className="flex-1 min-h-12 py-3 text-sm font-bold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
-          >
+          <button ref={cancelRef} onClick={onCancel} className={`flex-1 ${btnSecondary}`}>
             {cancelLabel}
           </button>
-          <button
-            onClick={onConfirm}
-            className={`flex-1 min-h-12 py-3 text-sm font-bold rounded-xl transition-colors ${
-              variant === 'danger'
-                ? 'bg-kit-500 text-ink hover:bg-kit-400'
-                : 'bg-ink text-volt-300 hover:bg-pitch-900'
-            }`}
-          >
+          <button onClick={onConfirm} className={`flex-1 ${variant === 'danger' ? btnDanger : btnPrimary}`}>
             {confirmLabel}
           </button>
         </div>

@@ -22,8 +22,10 @@ import {
 } from '@/lib/api';
 import { formatAccountNumber, frequencyShort, paymentShareText } from '@/lib/billing';
 import { CountUp, CountUpNaira, LiveDot, stagger } from '@/components/motion';
+import { Collapse, CollapseButton, useRemembered } from '@/components/collapse';
 import { Sheet } from '@/components/sheet';
 import { TransfersSheet, transferName } from '@/components/home/transfers-sheet';
+import { SheetTitle } from '@/components/home/sheet-title';
 import { ConfirmSheet } from '@/components/match-day/confirm-sheet';
 import { useToast } from '@/components/toast';
 import { prettyTime } from '@/components/player-ui';
@@ -309,6 +311,7 @@ export function MoneyCard({
   gameFallback,
   canManage,
   onScheduleGame,
+  onOpenAccount,
   onGameEnded,
 }: {
   group: IGroupWithMembers;
@@ -317,6 +320,8 @@ export function MoneyCard({
   gameFallback: ISessionWithDetails | null;
   canManage: boolean;
   onScheduleGame: () => void;
+  /** Opens the full account details: share text, QR, group link. */
+  onOpenAccount: () => void;
   /** Called once a game is ended from the card, so the page can update its copy. */
   onGameEnded?: (gameId: string) => void;
 }) {
@@ -336,6 +341,30 @@ export function MoneyCard({
   const unknown = recent.filter((t) => t.status === 'unmatched');
   const ticker = [...unknown.slice(0, 1), ...recent.filter((t) => t.status !== 'unmatched')].slice(0, 2);
   const [sheet, setSheet] = useState<{ id: string | null } | null>(null);
+  const account = billing?.account ?? null;
+  const [accountOpen, toggleAccount] = useRemembered('pitchaside_home_account_open', true);
+  const [gameOpen, toggleGame] = useRemembered('pitchaside_home_game_open', true);
+  const accountId = useId();
+  const [refreshing, setRefreshing] = useState(false);
+  // Money in today (by this phone's clock) and how many transfers there are. The list holds the
+  // latest 200, so past that the count says "200+" rather than a wrong number.
+  const today = localToday();
+  const todayIn = recent.filter((t) => localDay(t.receivedAt) === today).reduce((sum, t) => sum + Number(t.amount), 0);
+  const transfersCount = (transfers?.length ?? 0) >= 200 ? '200+' : String(recent.length);
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await money.reload();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+  const copyNumber = (n: string) =>
+    navigator.clipboard.writeText(n).then(
+      () => toast.success('Account number copied'),
+      () => toast.error('Could not copy. Press and hold the number to copy it instead.'),
+    );
   const hasAccount = billing ? !!billing.account : !!group.accountNumber;
 
   async function remind() {
@@ -378,27 +407,60 @@ export function MoneyCard({
     >
       <div className="absolute inset-0 turf-stripes" />
       <div className="relative p-5">
-        {/* Who this money belongs to, and the account details behind a button */}
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-white/70 truncate min-w-0">{group.name}</p>
-          {hasAccount ? null : (
-            <Link
-              href={`/groups/${group.id}`}
-              className="shrink-0 inline-flex items-center h-11 -my-1.5 px-3.5 rounded-full bg-volt-400 text-[13px] font-bold text-ink"
+        {/* The account: whose money, refresh, fold */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/65">Account</p>
+            <p className="text-sm font-semibold text-white truncate">{group.name}</p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {!hasAccount && (
+              <Link
+                href={`/groups/${group.id}`}
+                className="press inline-flex items-center h-11 px-3.5 rounded-full bg-volt-400 text-[13px] font-bold text-ink"
+              >
+                Set up account
+              </Link>
+            )}
+            <button
+              onClick={refresh}
+              disabled={refreshing}
+              aria-label={refreshing ? 'Refreshing' : 'Refresh balance and transfers'}
+              className="press w-11 h-11 -my-2 flex items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white disabled:opacity-100 transition-colors"
             >
-              Set up account
-            </Link>
-          )}
+              <span className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                <RefreshIcon spinning={refreshing} />
+              </span>
+            </button>
+            <CollapseButton open={accountOpen} onClick={toggleAccount} controls={accountId} label="account" onDark />
+          </div>
         </div>
 
+        {/* Folded: the figure that matters, and anything that needs them */}
+        {!accountOpen && (
+          <button onClick={toggleAccount} className="press animate-rise mt-2 w-full flex items-baseline gap-2 flex-wrap text-left">
+            <span className="font-display text-2xl font-extrabold text-volt-300 tabular-nums">
+              {balance == null ? '₦…' : hidden ? '₦••••••' : formatCurrency(Number(balance.available))}
+            </span>
+            {todayIn > 0 && !hidden && <span className="text-xs font-bold text-white/75 tabular-nums">+{formatCurrency(todayIn)} today</span>}
+            {unknown.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-sun-400">
+                <LiveDot className="bg-sun-400" />
+                {unknown.length} to match
+              </span>
+            )}
+          </button>
+        )}
+
+        <Collapse open={accountOpen} id={accountId}>
         {/* The balance: the number organisers check */}
         <div className="mt-3 flex items-center gap-1">
-          <p className="text-xs font-semibold text-white/60">In the account</p>
+          <p className="text-xs font-semibold text-white/70">In the account</p>
           <button
             onClick={toggleHidden}
             aria-pressed={hidden}
             aria-label="Hide balance"
-            className="w-11 h-11 -my-3 -ml-1.5 flex items-center justify-center rounded-full text-white/60 hover:text-white transition-colors"
+            className="w-11 h-11 -my-3 -ml-1.5 flex items-center justify-center rounded-full text-white/70 hover:text-white transition-colors"
           >
             <EyeIcon off={hidden} />
           </button>
@@ -407,14 +469,14 @@ export function MoneyCard({
           <div className="mt-1.5 flex items-center gap-3">
             <p className="text-sm font-semibold text-white/80">Couldn&apos;t load the balance.</p>
             <button
-              onClick={() => money.reload()}
+              onClick={refresh}
               className="shrink-0 h-11 px-3.5 rounded-full bg-white/10 text-[13px] font-bold text-white hover:bg-white/15 transition-colors"
             >
               Try again
             </button>
           </div>
         ) : (
-          <p className="font-display text-[44px] leading-none font-extrabold text-volt-300 mt-1.5" aria-hidden>
+          <p className={`font-display text-[44px] leading-none font-extrabold text-volt-300 mt-1 transition-opacity ${refreshing ? 'opacity-60' : ''}`} aria-hidden>
             {balance == null ? (
               <span className="inline-block h-10 w-44 rounded-xl bg-white/10 animate-pulse align-middle" />
             ) : hidden ? (
@@ -434,11 +496,65 @@ export function MoneyCard({
                 ? 'Balance hidden'
                 : `${formatCurrency(Number(balance.available))} in the account`}
         </p>
-        {updatedAt && (
+        {balanceFailed && balance != null ? (
+          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-sun-400">
+            Not up to date · couldn&apos;t refresh
+            <button onClick={refresh} className="underline underline-offset-2 min-h-8">
+              Try again
+            </button>
+          </p>
+        ) : updatedAt ? (
           <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/65">
             <LiveDot />
-            Updated {now - updatedAt < 60_000 ? 'just now' : ago(new Date(updatedAt).toISOString(), now).toLowerCase()}
+            {refreshing
+              ? 'Refreshing…'
+              : `Updated ${now - updatedAt < 60_000 ? 'just now' : ago(new Date(updatedAt).toISOString(), now).toLowerCase()}`}
           </p>
+        ) : null}
+
+        {/* Money in at a glance: today, ever, how many. Each opens the list behind it. */}
+        {hasAccount && balance && transfers && (
+          <div className="mt-4 grid grid-cols-[1fr_1fr_auto] rounded-2xl bg-white/[0.06] divide-x divide-white/[0.08]">
+            {[
+              { label: 'Today', value: hidden ? '₦•••' : formatCurrency(todayIn), tone: todayIn > 0 ? 'text-volt-300' : 'text-white' },
+              { label: 'All time in', value: hidden ? '₦•••' : formatCurrency(Number(balance.totalIn)), tone: 'text-white' },
+              { label: 'Transfers', value: transfersCount, tone: 'text-white' },
+            ].map((f, i) => (
+              <button
+                key={f.label}
+                onClick={() => setSheet({ id: null })}
+                style={stagger(i, 60, 100)}
+                className="press animate-rise min-w-0 px-2.5 py-2.5 text-left hover:bg-white/[0.05] first:rounded-l-2xl last:rounded-r-2xl transition-colors"
+              >
+                <span className={`block font-display text-[15px] font-extrabold tabular-nums tracking-tight whitespace-nowrap ${f.tone}`}>{f.value}</span>
+                <span className="block mt-0.5 text-[11px] font-bold text-white/65">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Where players pay: number to copy, details to share */}
+        {account && (
+          <div className="mt-3 flex items-center gap-2 rounded-2xl border border-white/10 pl-3.5 pr-1.5 py-1.5">
+            <span className="flex-1 min-w-0">
+              <span className="block text-[11px] font-semibold text-white/65 truncate">{account.bankName}</span>
+              <span className="block font-display text-[15px] font-extrabold tracking-[0.04em] tabular-nums text-white">
+                {formatAccountNumber(account.accountNumber)}
+              </span>
+            </span>
+            <button
+              onClick={() => copyNumber(account.accountNumber)}
+              className="press h-11 px-3 rounded-xl text-[13px] font-bold text-white hover:bg-white/10 transition-colors"
+            >
+              Copy
+            </button>
+            <button
+              onClick={onOpenAccount}
+              className="press h-11 px-3.5 rounded-xl bg-white/10 text-[13px] font-bold text-white hover:bg-white/15 transition-colors"
+            >
+              Share
+            </button>
+          </div>
         )}
 
         {/* The ticker: what's come in lately, newest on top */}
@@ -511,6 +627,7 @@ export function MoneyCard({
             No transfers yet. Share the account details and they&apos;ll show up here as they land.
           </p>
         )}
+        </Collapse>
         {sheet && transfers && (
           <TransfersSheet transfers={transfers} groupId={group.id} hidden={hidden} openId={sheet.id} onClose={() => setSheet(null)} />
         )}
@@ -526,6 +643,8 @@ export function MoneyCard({
             onRemind={remind}
             ending={ending}
             onEnd={() => setConfirmEnd(true)}
+            open={gameOpen}
+            onToggle={toggleGame}
           />
         ) : (
           <div>
@@ -570,6 +689,8 @@ function GameSection({
   onRemind,
   ending,
   onEnd,
+  open,
+  onToggle,
 }: {
   game: ISessionWithDetails;
   rsvp: RsvpBoard | null;
@@ -578,7 +699,10 @@ function GameSection({
   onRemind: () => void;
   ending: boolean;
   onEnd: () => void;
+  open: boolean;
+  onToggle: () => void;
 }) {
+  const bodyId = useId();
   const phase = phaseOf(game);
   const days = daysFromToday(game.date);
   const { payments, paid, owing, byHand, coveredByDues } = gameMoney(game);
@@ -607,24 +731,40 @@ function GameSection({
 
   return (
     <div>
-      <Link href={gameHref} className="group flex items-start justify-between gap-3 -mx-1 px-1 py-0.5 rounded-xl">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-white/60">{heading}</p>
-          <p className="font-display text-lg font-extrabold leading-tight mt-0.5 group-hover:text-volt-300 transition-colors">
-            {when}
-            {kickoff ? ` · ${prettyTime(kickoff)}` : ''}
-          </p>
-        </div>
-        <span
-          className={`shrink-0 mt-1 inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2.5 py-1 rounded-full whitespace-nowrap animate-pop-in ${
-            phase === 'matchday' ? 'bg-volt-400 text-ink' : notEnded ? 'bg-sun-400/15 text-sun-400' : 'bg-white/10 text-white/80'
-          }`}
-        >
-          {phase === 'matchday' && <LiveDot className="bg-ink" />}
-          {notEnded && <LiveDot className="bg-sun-400" />}
-          {chip}
+      <div className="flex items-start gap-2">
+      <Link href={gameHref} className="group flex-1 min-w-0 -mx-1 px-1 py-0.5 rounded-xl">
+        <span className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-white/70">{heading}</span>
+          <span
+            className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap animate-pop-in ${
+              phase === 'matchday' ? 'bg-volt-400 text-ink' : notEnded ? 'bg-sun-400/15 text-sun-400' : 'bg-white/10 text-white/80'
+            }`}
+          >
+            {phase === 'matchday' && <LiveDot className="bg-ink" />}
+            {notEnded && <LiveDot className="bg-sun-400" />}
+            {chip}
+          </span>
+        </span>
+        <span className="block font-display text-lg font-extrabold leading-tight mt-1 group-hover:text-volt-300 transition-colors">
+          {when}
+          {kickoff ? ` · ${prettyTime(kickoff)}` : ''}
         </span>
       </Link>
+      <CollapseButton open={open} onClick={onToggle} controls={bodyId} label="game details" onDark />
+      </div>
+
+      {/* Folded: money against target and what's owed, in one line */}
+      {!open && (
+        <button onClick={onToggle} className="press animate-rise mt-2 w-full flex items-baseline gap-2 flex-wrap text-left text-xs font-bold text-white/75 tabular-nums">
+          <span className="font-display text-lg font-extrabold text-white">
+            {coveredByDues ? `${paid.length}/${payments.length} paid` : formatCurrency(collected)}
+          </span>
+          {!coveredByDues && <span>of {formatCurrency(target)}</span>}
+          {owing.length > 0 && <span className="text-sun-400">· {owing.length} to pay</span>}
+        </button>
+      )}
+
+      <Collapse open={open} id={bodyId}>
 
       {/* Collected so far — transfers and by-hand payments as separate parts of the bar */}
       <div className="mt-3 flex items-baseline gap-1.5 flex-wrap">
@@ -697,6 +837,8 @@ function GameSection({
           </Link>
         ))}
       </div>
+
+      </Collapse>
 
       <PrimaryAction phase={phase} game={game} owing={owing.length} canManage={canManage} reminding={reminding} onRemind={onRemind} />
       {/* A played game nobody ended: voting only opens once it is */}
@@ -849,21 +991,7 @@ export function AccountDetailsSheet({
 
   return (
     <Sheet titleId={titleId} onClose={onClose} align="left">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 id={titleId} className="font-display text-xl font-extrabold text-ink leading-tight">Account details</h2>
-          <p className="text-xs text-gray-500 mt-0.5 truncate">Players pay {group.name} here</p>
-        </div>
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="w-11 h-11 -mt-2 -mr-2 shrink-0 flex items-center justify-center rounded-full text-gray-500 hover:bg-chalk hover:text-ink"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+      <SheetTitle id={titleId} title="Account details" sub={`Players pay ${group.name} here`} onClose={onClose} />
 
       <button
         onClick={() => copy(account.accountNumber, 'Account number')}
@@ -993,3 +1121,14 @@ export function NeedsYou({ items }: { items: NeedsItem[] }) {
     </section>
   );
 }
+
+/** A transfer's day as YYYY-MM-DD on this phone's clock, to compare with localToday(). */
+function localDay(iso: string) {
+  return new Date(iso).toLocaleDateString('en-CA');
+}
+
+const RefreshIcon = ({ spinning }: { spinning: boolean }) => (
+  <svg className={`w-4 h-4 ${spinning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+  </svg>
+);

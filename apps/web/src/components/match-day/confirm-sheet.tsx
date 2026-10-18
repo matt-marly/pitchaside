@@ -1,6 +1,7 @@
 'use client';
 
 import { Sheet } from '@/components/sheet';
+import { btnDanger, btnPrimary, btnSecondary } from '@/components/buttons';
 
 /**
  * A ConfirmDialog whose "no" button can be named too ("Keep game"), for when "Cancel" would be
@@ -29,20 +30,15 @@ export function ConfirmSheet({
   if (!open) return null;
   return (
     <Sheet titleId="confirm-sheet" onClose={onCancel} align="left">
-      <h3 id="confirm-sheet" className="font-display text-xl font-extrabold text-ink mb-1">
+      <h3 id="confirm-sheet" className="font-display text-xl font-extrabold text-ink leading-tight mb-1.5">
         {title}
       </h3>
-      <p className="text-sm text-gray-600 mb-5">{message}</p>
+      <p className="text-sm text-gray-600 leading-relaxed mb-6">{message}</p>
       <div className="flex gap-3">
-        <button onClick={onCancel} className="flex-1 min-h-12 text-sm font-bold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">
+        <button onClick={onCancel} className={`flex-1 ${btnSecondary}`}>
           {cancelLabel}
         </button>
-        <button
-          onClick={onConfirm}
-          className={`flex-1 min-h-12 text-sm font-bold rounded-xl transition-colors ${
-            danger ? 'bg-kit-500 text-white hover:bg-kit-600' : 'bg-ink text-volt-300 hover:bg-pitch-900'
-          }`}
-        >
+        <button onClick={onConfirm} className={`flex-1 ${danger ? btnDanger : btnPrimary}`}>
           {confirmLabel}
         </button>
       </div>
