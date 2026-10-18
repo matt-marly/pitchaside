@@ -516,18 +516,29 @@ export function MoneyCard({
         {hasAccount && balance && transfers && (
           <div className="mt-4 grid grid-cols-[1fr_1fr_auto] rounded-2xl bg-white/[0.06] divide-x divide-white/[0.08]">
             {[
-              { label: 'Today', value: hidden ? '₦•••' : formatCurrency(todayIn) },
+              { label: 'Today', value: hidden ? '₦•••' : todayIn ? `+${formatCurrency(todayIn)}` : formatCurrency(0), today: true },
               { label: 'Total received', value: hidden ? '₦•••' : formatCurrency(Number(balance.totalIn)) },
               { label: 'Transfers in', value: transfersCount },
-            ].map((f, i) => (
+            ].map((f: { label: string; value: string; today?: boolean }, i) => (
               <button
                 key={f.label}
                 onClick={() => setSheet({ id: null })}
                 style={stagger(i, 60, 100)}
-                className="press animate-rise min-w-0 flex flex-col justify-start px-2.5 py-2.5 text-left hover:bg-white/[0.05] first:rounded-l-2xl last:rounded-r-2xl transition-colors"
+                className={`press animate-rise min-w-0 flex flex-col justify-start px-2.5 py-2.5 text-left hover:bg-white/[0.05] first:rounded-l-2xl last:rounded-r-2xl transition-colors ${
+                  f.today && todayIn > 0 ? 'bg-volt-400/[0.08]' : ''
+                }`}
               >
-                <span className="block text-[14px] font-bold text-white/90 tabular-nums tracking-tight whitespace-nowrap">{f.value}</span>
-                <span className="block mt-0.5 text-[11px] font-bold leading-tight text-white/65 whitespace-nowrap truncate">{f.label}</span>
+                <span
+                  className={`block text-[14px] font-bold tabular-nums tracking-tight whitespace-nowrap ${
+                    f.today && todayIn > 0 ? 'text-volt-300' : 'text-white/90'
+                  }`}
+                >
+                  {f.value}
+                </span>
+                <span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-bold leading-tight text-white/65 whitespace-nowrap">
+                  {f.today && todayIn > 0 && <LiveDot />}
+                  {f.label}
+                </span>
               </button>
             ))}
           </div>
@@ -721,7 +732,9 @@ function GameSection({
   const target = Number(game.targetAmount);
   const collected = Number(game.collectedAmount);
   const byTransfer = Math.max(0, collected - byHand);
-  const pct = (n: number) => (target > 0 ? Math.min(100, (n / target) * 100) : 0);
+  // Before the game the bar runs to the full-squad target; once it's played, empty spots can't fill,
+  // so it runs to what the players who were in actually owed.
+  const pct = (n: number) => (scale > 0 ? Math.min(100, (n / scale) * 100) : 0);
   const duesPct = payments.length ? (paid.length / payments.length) * 100 : 0;
   const kickoff = game.kickoffTime || game.group?.kickoffTime;
   const when = gameDay(game.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -750,6 +763,9 @@ function GameSection({
   const taken = rsvp?.requireRsvp ? rsvp.in.length : payments.length;
   const openSpots = Math.max(0, capacity - taken);
   const openAmount = Math.max(0, target - collected - owedAmount);
+  const played = phase === 'after';
+  const dueTotal = collected + owedAmount;
+  const scale = played ? dueTotal : target;
   const upcoming = phase === 'before';
   const rows = [
     {
@@ -771,7 +787,9 @@ function GameSection({
       ? {
           key: 'open',
           dot: 'bg-white/25',
-          label: `${openSpots} spot${openSpots === 1 ? '' : 's'} free${openAmount > 0 ? ` · ${formatCurrency(openAmount)} if filled` : ''}`,
+          label: played
+            ? `${openSpots} spot${openSpots === 1 ? '' : 's'} weren't filled`
+            : `${openSpots} spot${openSpots === 1 ? '' : 's'} free${openAmount > 0 ? ` · ${formatCurrency(openAmount)} if filled` : ''}`,
           href: `${gameHref}?tab=teams`,
         }
       : null,
@@ -813,7 +831,9 @@ function GameSection({
               ? 'paid their dues'
               : upcoming
                 ? `${formatCurrency(collected)} collected${owedAmount ? ` · ${formatCurrency(owedAmount)} due` : ''}${openSpots ? ` · ${openSpots} spots free` : ''}`
-                : `collected · ${formatCurrency(owedAmount)} still owed${openSpots ? ` · ${openSpots} spots free` : ''}`
+                : owedAmount
+                  ? `collected · ${formatCurrency(owedAmount)} still owed`
+                  : 'collected · everyone has paid'
           }
           action={null}
         />
@@ -836,7 +856,10 @@ function GameSection({
         ) : (
           <>
             <CountUpNaira value={collected} className="font-display text-[28px] font-extrabold leading-none" />
-            <span className="text-sm text-white/70 tabular-nums">collected of {formatCurrency(target)}</span>
+            <span className="text-sm text-white/70 tabular-nums">
+              collected of {formatCurrency(played ? dueTotal : target)}
+              {played ? ' due' : ''}
+            </span>
           </>
         )}
       </div>
@@ -846,7 +869,9 @@ function GameSection({
         aria-label={
           coveredByDues
             ? `${paid.length} of ${payments.length} paid their dues`
-            : `${formatCurrency(collected)} paid, ${formatCurrency(owedAmount)} ${upcoming ? 'due' : 'still owed'}, ${formatCurrency(openAmount)} more if the free spots fill`
+            : played
+              ? `${formatCurrency(collected)} paid, ${formatCurrency(owedAmount)} still owed`
+              : `${formatCurrency(collected)} paid, ${formatCurrency(owedAmount)} due, ${formatCurrency(openAmount)} more if the free spots fill`
         }
       >
         {coveredByDues ? (
