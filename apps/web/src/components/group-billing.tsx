@@ -397,7 +397,7 @@ export function GroupAccountCard({
 const transferStatus: Record<BankTransfer['status'], { label: string; text: string; avatar: string }> = {
   matched: { label: 'Matched', text: 'text-pitch-600', avatar: 'bg-volt-300 text-ink' },
   assigned: { label: 'Matched', text: 'text-pitch-600', avatar: 'bg-volt-300 text-ink' },
-  unmatched: { label: 'Needs matching', text: 'text-amber-700', avatar: 'bg-sun-400/30 text-amber-800' },
+  unmatched: { label: 'To match', text: 'text-amber-700', avatar: 'bg-sun-400/30 text-amber-800' },
   ignored: { label: 'Ignored', text: 'text-gray-400', avatar: 'bg-gray-100 text-gray-400' },
 };
 
@@ -449,7 +449,7 @@ function TransferDayList({ days, children }: { days: TransferDay[]; children: (t
             <h3 className="text-[13px] font-bold text-gray-600">{day.label}</h3>
             <span className="text-[13px] font-semibold text-gray-500 tabular-nums">{formatCurrency(day.total)}</span>
           </div>
-          <div className="-mx-4 divide-y divide-gray-100 text-left">
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-card divide-y divide-gray-100 overflow-hidden text-left">
             {day.items.map((t) => (
               <div key={t.id} id={`transfer-${t.id}`} className="scroll-mt-24">
                 {children(t)}
@@ -797,33 +797,32 @@ export function TransfersPanel({
       )}
 
       <div>
-        <div className="flex items-end justify-between gap-3">
-          <h2 className="font-display text-[22px] font-extrabold text-ink leading-none">Money in</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-bold text-ink">Money in</h2>
           <button
             onClick={() => setShowRecord(!showRecord)}
             aria-expanded={showRecord}
-            className="press -mr-2 -mb-2 h-11 px-2 text-[15px] font-bold text-pitch-600 hover:text-pitch-700 whitespace-nowrap"
+            className="h-11 -my-2 px-1 text-sm font-bold text-pitch-700 whitespace-nowrap"
           >
             {showRecord ? 'Close' : 'Record a missed one'}
           </button>
         </div>
-        <p className="mt-1.5 text-[13px] text-gray-600 tabular-nums">
+        <p className="text-xs text-gray-500 tabular-nums">
           {formatCurrency(received)} from {counted.length} transfer{counted.length === 1 ? '' : 's'}
         </p>
         {transfers.length > 0 && (
-          <div role="radiogroup" aria-label="Show transfers" className="mt-3 flex p-1 rounded-xl bg-chalk">
+          <div role="radiogroup" aria-label="Show transfers" className="mt-2 flex gap-1">
             {(['all', 'unmatched'] as const).map((f) => (
               <button
                 key={f}
                 role="radio"
                 aria-checked={activeFilter === f}
                 onClick={() => setFilter(f)}
-                className={`press flex-1 min-h-9 rounded-lg text-[13px] font-bold transition-colors duration-200 ${
-                  activeFilter === f ? 'bg-white text-ink shadow-card' : 'text-gray-600 hover:text-ink'
+                className={`min-h-9 px-3 text-xs font-bold rounded-xl whitespace-nowrap tabular-nums transition-colors ${
+                  activeFilter === f ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink hover:bg-chalk'
                 }`}
               >
-                {f === 'all' ? 'All' : 'To match'}{' '}
-                <span className="tabular-nums text-gray-400">{f === 'all' ? counted.length : unmatchedCount}</span>
+                {f === 'all' ? 'All' : 'To match'} {f === 'all' ? counted.length : unmatchedCount}
               </button>
             ))}
           </div>

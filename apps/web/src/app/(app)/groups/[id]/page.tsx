@@ -336,7 +336,7 @@ export default function GroupDetailPage() {
   const paidCount = members.filter((m) => m.due?.state === 'paid').length;
   const owesCount = members.filter((m) => m.due?.state === 'owes').length;
   const outCount = members.filter((m) => m.due?.state === 'out').length;
-  // Joined in the last week: worth a glance (the exact date is in their card).
+  // Joined in the last week: worth a word (the exact date is in their card).
   const isNew = (joinedAt: string) => Date.now() - new Date(joinedAt).getTime() < 7 * 86_400_000;
   const sentence = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const q = query.trim().toLowerCase();
@@ -593,7 +593,7 @@ export default function GroupDetailPage() {
         id="group-tabs"
         className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-[max(8px,env(safe-area-inset-top))] pb-2 mt-3 mb-3 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
       >
-        <div role="tablist" aria-label={`${group.name} sections`} className="flex p-1 bg-chalk rounded-2xl">
+        <div role="tablist" aria-label={`${group.name} sections`} className="flex p-1 bg-white border border-gray-200 rounded-2xl">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -601,7 +601,7 @@ export default function GroupDetailPage() {
               aria-selected={tab === t.key}
               onClick={() => openTab(t.key)}
               className={`press relative flex-1 min-h-11 px-1 text-[13px] sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors duration-200 ${
-                tab === t.key ? 'bg-ink text-volt-300 shadow-card' : 'text-gray-600 hover:text-ink'
+                tab === t.key ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
               }`}
             >
               {t.label}
@@ -623,7 +623,7 @@ export default function GroupDetailPage() {
       {/* Money: what's come in, and what's gone out */}
       {tab === 'money' && (
         <div>
-          <div role="radiogroup" aria-label="Show" className="mb-3 grid grid-cols-2 p-1 rounded-full bg-chalk border border-gray-200">
+          <div role="radiogroup" aria-label="Show" className="mb-4 grid grid-cols-2 p-1 bg-white border border-gray-200 rounded-2xl">
             {(
               [
                 { key: 'transfers', label: 'Money in', badge: unmatched },
@@ -635,8 +635,8 @@ export default function GroupDetailPage() {
                 role="radio"
                 aria-checked={moneyView === v.key}
                 onClick={() => setMoneyView(v.key)}
-                className={`press min-h-10 rounded-full text-[13px] font-bold inline-flex items-center justify-center gap-1.5 transition-colors ${
-                  moneyView === v.key ? 'bg-white text-ink shadow-card' : 'text-gray-600 hover:text-ink'
+                className={`press min-h-10 rounded-xl text-[13px] font-bold inline-flex items-center justify-center gap-1.5 transition-colors ${
+                  moneyView === v.key ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
                 }`}
               >
                 {v.label}
@@ -705,28 +705,29 @@ export default function GroupDetailPage() {
       {/* Members Tab */}
       {tab === 'members' && (
         <section aria-labelledby="squad-title">
-          {/* The squad: a title, how big it is, and adding someone */}
-          <div className="flex items-end justify-between gap-3">
-            <h2 id="squad-title" className="font-display text-[22px] font-extrabold text-ink leading-none">
-              Squad <span className="text-gray-400 tabular-nums">{memberCount}</span>
-            </h2>
+          {/* Heading row like the home's sections: a plain title and one text action */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 id="squad-title" className="text-base font-bold text-ink">
+                Squad
+              </h2>
+              {nextDue && <p className="text-xs text-gray-500">{perGame ? 'Payments for' : 'Dues for'} {dueLabel}</p>}
+            </div>
             <button
               onClick={() => setShowAddMember(!showAddMember)}
               aria-expanded={showAddMember}
-              className="press -mr-2 -mb-2 h-11 px-2 inline-flex items-center gap-1.5 rounded-xl text-[15px] font-bold text-pitch-600 hover:text-pitch-700"
+              className="h-11 -my-2 px-1 text-sm font-bold text-pitch-700"
             >
-              <PlusIcon />
-              Add player
+              {showAddMember ? 'Close' : 'Add player'}
             </button>
           </div>
-          <p className="mt-1.5 text-[13px] text-gray-600">Up to {group.targetPlayers} play each game.</p>
 
           {showAddMember && (
-            <div className="mt-3 rounded-2xl bg-chalk p-3.5 space-y-2.5 animate-fade-in-up">
+            <div className="mt-2 bg-white rounded-3xl border border-gray-100 shadow-card p-4 animate-fade-in-up">
               {availablePlayers.length === 0 ? (
-                <p className="text-sm text-gray-700">
+                <p className="text-sm text-gray-600">
                   Everyone you&apos;ve added is already here.{' '}
-                  <Link href="/players/new" className="text-pitch-600 font-bold hover:underline">
+                  <Link href="/players/new" className="text-pitch-700 font-bold hover:underline">
                     Add a new player
                   </Link>{' '}
                   or send the invite link.
@@ -737,7 +738,7 @@ export default function GroupDetailPage() {
                     value={selectedPlayerId}
                     onChange={(e) => setSelectedPlayerId(e.target.value)}
                     aria-label="Player to add"
-                    className="flex-1 min-w-0 min-h-11 px-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
+                    className="flex-1 min-w-0 min-h-11 px-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
                   >
                     <option value="">Pick one of your players</option>
                     {availablePlayers.map((p) => (
@@ -759,14 +760,14 @@ export default function GroupDetailPage() {
           )}
 
           {!group.memberships?.length ? (
-            <div className="mt-4">
+            <div className="mt-2">
               <EmptyState icon="users" title="No one in the squad yet" description="Send the invite link to your group chat, or add players yourself." />
             </div>
           ) : (
             <>
               {memberCount > 6 && (
-                <div className="relative mt-4">
-                  <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+                <div className="relative mt-2">
+                  <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                   </svg>
                   <input
@@ -775,18 +776,15 @@ export default function GroupDetailPage() {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search name or nickname"
                     aria-label="Search the squad"
-                    className="w-full h-11 pl-10 pr-3.5 bg-chalk rounded-xl text-[15px] placeholder:text-gray-500 focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:bg-white"
+                    className="w-full pl-10 pr-3 py-3 bg-white border border-gray-200 rounded-2xl text-sm placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
                   />
                 </div>
               )}
 
-              {/* Who's paid for the next game: one segmented control, its scope said once above it */}
+              {/* Who's paid for the next game: the same filter style as the Sessions page */}
               {nextDue && (
-                <div className="mt-4">
-                  <p className="text-[13px] font-semibold text-gray-600">
-                    {perGame ? 'Paid for' : 'Dues for'} {dueLabel}
-                  </p>
-                  <div role="radiogroup" aria-label={`Show the squad by payment for ${dueLabel}`} className="mt-1.5 flex p-1 rounded-xl bg-chalk">
+                <div className="mt-3">
+                  <div role="radiogroup" aria-label={`Show the squad by payment for ${dueLabel}`} className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
                     {(
                       [
                         { key: 'all', label: 'All', n: memberCount },
@@ -800,83 +798,18 @@ export default function GroupDetailPage() {
                         role="radio"
                         aria-checked={memberFilter === f.key}
                         onClick={() => setMemberFilter(f.key)}
-                        className={`press flex-1 min-h-9 rounded-lg text-[13px] font-bold whitespace-nowrap transition-colors duration-200 ${
-                          memberFilter === f.key ? 'bg-white text-ink shadow-card' : 'text-gray-600 hover:text-ink'
+                        className={`shrink-0 min-h-9 px-3 text-xs font-bold rounded-xl whitespace-nowrap tabular-nums transition-colors ${
+                          memberFilter === f.key ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink hover:bg-chalk'
                         }`}
                       >
-                        {f.label} <span className={`tabular-nums ${memberFilter === f.key ? 'text-gray-500' : 'text-gray-400'}`}>{f.n}</span>
+                        {f.label} {f.n}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              <ul className="mt-3 -mx-1 divide-y divide-gray-100">
-                {/* The organiser plays too: a quiet first row, not a banner */}
-                {user && !imAMember && !q && memberFilter === 'all' && (
-                  <li>
-                    <div className="flex items-center gap-3 px-1 py-2.5 min-h-[60px]">
-                      <span className="w-10 h-10 shrink-0 rounded-full border-2 border-dashed border-gray-300 text-gray-500 flex items-center justify-center" aria-hidden>
-                        <PlusIcon />
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[15px] font-bold text-ink">Playing too?</span>
-                        <span className="block text-[13px] text-gray-600 truncate">Add yourself to the squad</span>
-                      </span>
-                      <button
-                        onClick={handleAddMe}
-                        disabled={addingMe}
-                        className="shrink-0 min-h-11 px-3.5 rounded-xl bg-ink text-volt-300 text-sm font-bold hover:bg-pitch-900 disabled:opacity-50 transition-colors"
-                      >
-                        {addingMe ? 'Adding…' : 'Add me'}
-                      </button>
-                    </div>
-                  </li>
-                )}
-                {shown.map((m) => {
-                  const name = `${m.player.firstName} ${m.player.lastName}`;
-                  const kit = kitFor(name);
-                  const credit = Number(m.credit ?? 0);
-                  const st = m.due?.state;
-                  const extra = [m.player.nickname && `“${m.player.nickname}”`, m.role !== 'player' && m.role, credit > 0 && `${formatCurrency(credit)} credit`].filter(
-                    Boolean,
-                  ) as string[];
-                  return (
-                    <li key={m.id}>
-                      <button
-                        onClick={() => setOpenMember(m.player.id)}
-                        className="press w-full flex items-center gap-3 px-1 py-2.5 min-h-[60px] text-left rounded-xl hover:bg-chalk transition-colors"
-                      >
-                        <span className={`relative w-10 h-10 shrink-0 rounded-full ${kit.bg} ${kit.fg} flex items-center justify-center text-[15px] font-extrabold font-display`} aria-hidden>
-                          {m.player.firstName.charAt(0)}
-                          {isNew(m.joinedAt) && <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-sky-300 ring-2 ring-white" />}
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-[15px] font-bold text-ink truncate">{name}</span>
-                          {(extra.length > 0 || isNew(m.joinedAt)) && (
-                            <span className="block text-[13px] text-gray-600 truncate">
-                              {sentence([isNew(m.joinedAt) && 'new this week', ...extra].filter(Boolean).join(', '))}
-                            </span>
-                          )}
-                        </span>
-                        {st && (
-                          <span className="shrink-0 flex items-center gap-2">
-                            <span
-                              className={`text-[13px] font-bold tabular-nums ${
-                                st === 'paid' ? 'text-pitch-600' : st === 'owes' ? 'text-amber-700' : 'text-gray-500'
-                              }`}
-                            >
-                              {st === 'paid' ? 'Paid' : st === 'owes' ? formatCurrency(m.due!.amount) : st === 'waived' ? 'Waived' : 'Not in'}
-                            </span>
-                            <Shirt state={st} />
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              {shown.length === 0 && (
+              {shown.length === 0 && !(user && !imAMember && !q && memberFilter === 'all') ? (
                 <p className="mt-6 text-sm text-gray-600 text-center">
                   {q
                     ? `No one called “${query.trim()}”.`
@@ -886,6 +819,76 @@ export default function GroupDetailPage() {
                         ? `Everyone is in for ${dueLabel}.`
                         : 'No one has paid yet.'}
                 </p>
+              ) : (
+                <ul className="mt-2 bg-white rounded-3xl border border-gray-100 shadow-card divide-y divide-gray-100 overflow-hidden">
+                  {/* The organiser plays too: a row like "Needs you", not a banner */}
+                  {user && !imAMember && !q && memberFilter === 'all' && (
+                    <li>
+                      <button
+                        onClick={handleAddMe}
+                        disabled={addingMe}
+                        className="w-full flex items-center gap-3 px-4 min-h-16 py-3 text-left hover:bg-chalk disabled:opacity-60 transition-colors"
+                      >
+                        <span className="w-10 h-10 rounded-xl bg-volt-300 text-ink flex items-center justify-center shrink-0" aria-hidden>
+                          <PlusIcon />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[15px] font-bold text-ink leading-snug">{addingMe ? 'Adding you…' : 'Add yourself'}</span>
+                          <span className="block text-xs text-gray-500 mt-0.5 truncate">If you play in this group too</span>
+                        </span>
+                        <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                        </svg>
+                      </button>
+                    </li>
+                  )}
+                  {shown.map((m) => {
+                    const name = `${m.player.firstName} ${m.player.lastName}`;
+                    const kit = kitFor(name);
+                    const credit = Number(m.credit ?? 0);
+                    const st = m.due?.state;
+                    const detail = [
+                      isNew(m.joinedAt) && 'New this week',
+                      m.player.nickname && `“${m.player.nickname}”`,
+                      m.role !== 'player' && sentence(m.role),
+                      credit > 0 && `${formatCurrency(credit)} credit`,
+                    ].filter(Boolean) as string[];
+                    return (
+                      <li key={m.id}>
+                        <button
+                          onClick={() => setOpenMember(m.player.id)}
+                          className="w-full flex items-center gap-3 px-4 min-h-16 py-3 text-left hover:bg-chalk transition-colors"
+                        >
+                          <span className={`w-10 h-10 shrink-0 rounded-full ${kit.bg} ${kit.fg} flex items-center justify-center text-sm font-extrabold font-display`} aria-hidden>
+                            {m.player.firstName.charAt(0)}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[15px] font-bold text-ink leading-snug truncate">{name}</span>
+                            {detail.length > 0 && <span className="block text-xs text-gray-500 mt-0.5 truncate">{detail.join(', ')}</span>}
+                          </span>
+                          {/* Where they stand for that game, set like an amount in a bank list */}
+                          {st && (
+                            <span className="shrink-0 text-right">
+                              {st === 'owes' ? (
+                                <>
+                                  <span className="block font-display text-[15px] font-extrabold text-amber-700 tabular-nums">{formatCurrency(m.due!.amount)}</span>
+                                  <span className="block text-xs text-gray-500">To pay</span>
+                                </>
+                              ) : (
+                                <span className={`block text-xs font-bold ${st === 'paid' ? 'text-pitch-600' : 'text-gray-400'}`}>
+                                  {st === 'paid' ? 'Paid' : st === 'waived' ? 'Waived' : 'Not in'}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                          </svg>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </>
           )}
@@ -924,24 +927,6 @@ export default function GroupDetailPage() {
       )}
       {showCreateSession && <NewSessionSheet groups={[group]} onClose={() => setShowCreateSession(false)} />}
     </div>
-  );
-}
-
-const SHIRT_PATH = 'M14 6 L19 4 Q24 8 29 4 L34 6 L45 13 L40 22 L35 19 L35 44 L13 44 L13 19 L8 22 L3 13 Z';
-
-/** The squad board's shirt: filled once paid, dashed while they owe, faint when they're not in this game. */
-function Shirt({ state }: { state: 'paid' | 'owes' | 'waived' | 'out' }) {
-  const paid = state === 'paid' || state === 'waived';
-  return (
-    <svg viewBox="0 0 48 48" className="w-6 h-6 shrink-0" aria-hidden>
-      <path
-        d={SHIRT_PATH}
-        className={paid ? 'fill-volt-400 stroke-ink' : state === 'owes' ? 'fill-none stroke-amber-600' : 'fill-none stroke-gray-300'}
-        strokeWidth={2.5}
-        strokeLinejoin="round"
-        strokeDasharray={state === 'owes' ? '4 3' : undefined}
-      />
-    </svg>
   );
 }
 

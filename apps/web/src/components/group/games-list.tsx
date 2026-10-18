@@ -58,7 +58,7 @@ function GameRow({ s, targetPlayers, kickoff }: { s: ISessionWithDetails; target
     <li>
       <Link
         href={`/sessions/${s.id}`}
-        className="press block px-1 py-3.5 rounded-xl hover:bg-chalk transition-colors"
+        className="block px-4 py-3.5 hover:bg-chalk transition-colors"
       >
         <div className="flex items-center justify-between gap-2">
           <p className="text-[15px] font-bold text-ink">
@@ -110,10 +110,10 @@ export function GamesList({
         .filter((g) => g.list.length)
         .map((g) => (
           <section key={g.title}>
-            <h3 className="px-1 mb-2 font-display text-[17px] font-extrabold text-ink">
-              {g.title} <span className="text-gray-400 tabular-nums">{g.list.length}</span>
+            <h3 className="mb-2 text-base font-bold text-ink">
+              {g.title} <span className="font-semibold text-gray-400 tabular-nums">{g.list.length}</span>
             </h3>
-            <ul className="-mx-1 divide-y divide-gray-100">
+            <ul className="bg-white rounded-3xl border border-gray-100 shadow-card divide-y divide-gray-100 overflow-hidden">
               {g.list.map((s) => (
                 <GameRow key={s.id} s={s} targetPlayers={targetPlayers} kickoff={kickoff} />
               ))}
