@@ -17,11 +17,14 @@ export function SheetTitle({ id, title, sub, onClose }: { id: string; title: str
       <button
         onClick={close}
         aria-label="Close"
-        className="press w-11 h-11 -mt-2 -mr-2 shrink-0 flex items-center justify-center rounded-full bg-chalk text-ink hover:bg-gray-200 transition-colors"
+        className="press group w-11 h-11 -mt-2 -mr-2.5 shrink-0 flex items-center justify-center rounded-full"
       >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-        </svg>
+        {/* A quiet 32px circle inside a full-size tap target, so it doesn't compete with the title */}
+        <span className="w-8 h-8 rounded-full bg-chalk text-gray-600 flex items-center justify-center group-hover:bg-gray-200 group-hover:text-ink transition-colors">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.75} stroke="currentColor" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </span>
       </button>
     </div>
   );

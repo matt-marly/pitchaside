@@ -30,7 +30,7 @@ import {
   type NeedsItem,
 } from '@/components/money-card';
 import { InviteSheet } from '@/components/home/invite-sheet';
-import { QuickActions, InviteIcon, BankShareIcon, CalendarPlusIcon, ICON_PATHS, icon, type QuickAction } from '@/components/home/quick-actions';
+import { QuickActions, InviteIcon, CalendarPlusIcon, ICON_PATHS, icon, type QuickAction } from '@/components/home/quick-actions';
 import { MoreActionsSheet, type MoreAction } from '@/components/home/more-actions-sheet';
 import { UpdatesBell, type Update } from '@/components/home/updates-bell';
 import { transferName } from '@/components/home/transfers-sheet';
@@ -352,41 +352,41 @@ export default function Dashboard() {
 
   // The weekly jobs: bring people in, add someone by hand, take cash at the pitch. The rest is in More.
   const cashHref = liveGame ? `/sessions/${liveGame.id}?tab=payments` : '/sessions';
+  const gid = group?.id;
   const quick: QuickAction[] = [
-    money.billing?.link ? { key: 'invite', label: 'Invite players', icon: <InviteIcon />, onClick: () => setShowInvite(true) } : null,
+    money.billing?.link ? { key: 'invite', label: 'Invite', icon: <InviteIcon />, onClick: () => setShowInvite(true) } : null,
     canManage ? { key: 'add', label: 'Add player', icon: icon(ICON_PATHS.addPlayer), onClick: () => router.push('/players/new') } : null,
     canManage ? { key: 'cash', label: 'Record cash', icon: icon(ICON_PATHS.cash), onClick: () => router.push(cashHref) } : null,
-    { key: 'more', label: 'More', icon: icon(ICON_PATHS.more), onClick: () => setShowMore(true) },
+    gid && canManage && money.billing?.account
+      ? { key: 'withdraw', label: 'Withdraw', icon: icon(ICON_PATHS.withdraw), onClick: () => router.push(`/groups/${gid}?tab=payouts`) }
+      : null,
   ].filter(Boolean) as QuickAction[];
-  const gid = group?.id;
+  // Everything else, named by where it goes. Nothing here that's already on the home screen.
   const moreSections = [
     {
       title: 'Money',
       actions: [
-        money.billing?.account ? { key: 'acct', label: 'Account details & share', icon: <BankShareIcon />, onClick: () => setShowAccount(true) } : null,
         gid ? { key: 'history', label: 'Transfer history', icon: icon(ICON_PATHS.history), href: `/groups/${gid}?tab=transfers` } : null,
-        gid && canManage ? { key: 'withdraw', label: 'Withdraw money', icon: icon(ICON_PATHS.withdraw), href: `/groups/${gid}?tab=payouts` } : null,
+        liveGame ? { key: 'payments', label: "This game's payments", icon: icon(ICON_PATHS.cash), href: `/sessions/${liveGame.id}?tab=payments` } : null,
       ].filter(Boolean) as MoreAction[],
     },
     {
-      title: 'Games & Cups',
+      title: 'Games',
       actions: [
-        canManage ? { key: 'new-game', label: 'New game', icon: <CalendarPlusIcon />, onClick: () => setShowNewGame(true) } : null,
+        canManage ? { key: 'new-game', label: 'Schedule a game', icon: <CalendarPlusIcon />, onClick: () => setShowNewGame(true) } : null,
         { key: 'games', label: 'All games', icon: icon(ICON_PATHS.calendar), href: '/sessions' },
         canManage ? { key: 'cup', label: 'Create a Cup', icon: icon(ICON_PATHS.trophy), href: '/competitions/new' } : null,
       ].filter(Boolean) as MoreAction[],
     },
     {
       title: 'Players',
-      actions: [
-        { key: 'players', label: canManage ? 'Players, names & nicknames' : 'All players', icon: icon(ICON_PATHS.players), href: '/players' },
-      ].filter(Boolean) as MoreAction[],
+      actions: [{ key: 'players', label: 'Manage players', icon: icon(ICON_PATHS.players), href: '/players' }],
     },
     {
       title: 'Group',
       actions: [
         gid ? { key: 'group', label: 'Group settings', icon: icon(ICON_PATHS.cog), href: `/groups/${gid}` } : null,
-        canManage ? { key: 'new-group', label: 'New group', icon: icon(ICON_PATHS.plus), href: '/groups/new' } : null,
+        canManage ? { key: 'new-group', label: 'Create a group', icon: icon(ICON_PATHS.plus), href: '/groups/new' } : null,
       ].filter(Boolean) as MoreAction[],
     },
   ];
@@ -458,7 +458,7 @@ export default function Dashboard() {
         />
       )}
 
-      <QuickActions actions={quick} />
+      <QuickActions actions={quick} onMore={() => setShowMore(true)} />
 
       {/* The top two; the rest are in the bell */}
       <NeedsYou items={needs.filter((n) => n.key !== 'new').slice(0, 2)} />

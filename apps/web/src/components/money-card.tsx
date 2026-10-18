@@ -360,9 +360,14 @@ export function MoneyCard({
       setRefreshing(false);
     }
   }
+  const [copiedNumber, setCopiedNumber] = useState(false);
   const copyNumber = (n: string) =>
     navigator.clipboard.writeText(n).then(
-      () => toast.success('Account number copied'),
+      () => {
+        setCopiedNumber(true);
+        window.setTimeout(() => setCopiedNumber(false), 1800);
+        toast.success('Account number copied');
+      },
       () => toast.error('Could not copy. Press and hold the number to copy it instead.'),
     );
   const hasAccount = billing ? !!billing.account : !!group.accountNumber;
@@ -438,24 +443,23 @@ export function MoneyCard({
 
         {/* Folded: the figure that matters, and anything that needs them */}
         {!accountOpen && (
-          <button onClick={toggleAccount} className="press animate-rise mt-2 w-full flex items-baseline gap-2 flex-wrap text-left">
-            <span className="font-display text-2xl font-extrabold text-volt-300 tabular-nums">
-              {balance == null ? '₦…' : hidden ? '₦••••••' : formatCurrency(Number(balance.available))}
-            </span>
-            {todayIn > 0 && !hidden && <span className="text-xs font-bold text-white/75 tabular-nums">+{formatCurrency(todayIn)} today</span>}
-            {unknown.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-sun-400">
-                <LiveDot className="bg-sun-400" />
-                {unknown.length} to match
-              </span>
-            )}
-          </button>
+          <FoldedSummary
+            onExpand={toggleAccount}
+            value={balance == null ? '₦…' : hidden ? '₦••••••' : formatCurrency(Number(balance.available))}
+            valueTone="text-volt-300"
+            caption={todayIn > 0 && !hidden ? `Account balance · ${formatCurrency(todayIn)} received today` : 'Account balance'}
+            action={
+              unknown.length > 0
+                ? { label: `${unknown.length} payment${unknown.length === 1 ? '' : 's'} need${unknown.length === 1 ? 's' : ''} matching`, onClick: () => setSheet({ id: unknown[0].id }) }
+                : null
+            }
+          />
         )}
 
         <Collapse open={accountOpen} id={accountId}>
         {/* The balance: the number organisers check */}
         <div className="mt-3 flex items-center gap-1">
-          <p className="text-xs font-semibold text-white/70">In the account</p>
+          <p className="text-xs font-semibold text-white/70">Account balance</p>
           <button
             onClick={toggleHidden}
             aria-pressed={hidden}
@@ -516,41 +520,44 @@ export function MoneyCard({
         {hasAccount && balance && transfers && (
           <div className="mt-4 grid grid-cols-[1fr_1fr_auto] rounded-2xl bg-white/[0.06] divide-x divide-white/[0.08]">
             {[
-              { label: 'Today', value: hidden ? '₦•••' : formatCurrency(todayIn), tone: todayIn > 0 ? 'text-volt-300' : 'text-white' },
-              { label: 'All time in', value: hidden ? '₦•••' : formatCurrency(Number(balance.totalIn)), tone: 'text-white' },
-              { label: 'Transfers', value: transfersCount, tone: 'text-white' },
+              { label: 'Received today', value: hidden ? '₦•••' : formatCurrency(todayIn), tone: todayIn > 0 ? 'text-volt-300' : 'text-white' },
+              { label: 'Total received', value: hidden ? '₦•••' : formatCurrency(Number(balance.totalIn)), tone: 'text-white' },
+              { label: 'Transfers in', value: transfersCount, tone: 'text-white' },
             ].map((f, i) => (
               <button
                 key={f.label}
                 onClick={() => setSheet({ id: null })}
                 style={stagger(i, 60, 100)}
-                className="press animate-rise min-w-0 px-2.5 py-2.5 text-left hover:bg-white/[0.05] first:rounded-l-2xl last:rounded-r-2xl transition-colors"
+                className="press animate-rise min-w-0 flex flex-col justify-start px-2.5 py-2.5 text-left hover:bg-white/[0.05] first:rounded-l-2xl last:rounded-r-2xl transition-colors"
               >
                 <span className={`block font-display text-[15px] font-extrabold tabular-nums tracking-tight whitespace-nowrap ${f.tone}`}>{f.value}</span>
-                <span className="block mt-0.5 text-[11px] font-bold text-white/65">{f.label}</span>
+                <span className="block mt-0.5 text-[11px] font-bold leading-tight text-white/65">{f.label}</span>
               </button>
             ))}
           </div>
         )}
 
-        {/* Where players pay: number to copy, details to share */}
+        {/* Where players pay: the number first, then copy and share */}
         {account && (
-          <div className="mt-3 flex items-center gap-2 rounded-2xl border border-white/10 pl-3.5 pr-1.5 py-1.5">
+          <div className="mt-3 flex items-center gap-1.5 rounded-2xl border border-white/10 pl-3.5 pr-1.5 py-1.5">
             <span className="flex-1 min-w-0">
-              <span className="block text-[11px] font-semibold text-white/65 truncate">{account.bankName}</span>
-              <span className="block font-display text-[15px] font-extrabold tracking-[0.04em] tabular-nums text-white">
+              <span className="block font-display text-[17px] font-extrabold tracking-[0.04em] tabular-nums text-white select-all">
                 {formatAccountNumber(account.accountNumber)}
+              </span>
+              <span className="block text-[11px] font-semibold text-white/65 truncate">
+                {account.bankName} · {account.accountName}
               </span>
             </span>
             <button
               onClick={() => copyNumber(account.accountNumber)}
-              className="press h-11 px-3 rounded-xl text-[13px] font-bold text-white hover:bg-white/10 transition-colors"
+              aria-label="Copy account number"
+              className="press w-11 h-11 shrink-0 rounded-xl border border-white/15 text-white flex items-center justify-center hover:bg-white/10 transition-colors"
             >
-              Copy
+              {copiedNumber ? <TickSmall /> : <CopySmall />}
             </button>
             <button
               onClick={onOpenAccount}
-              className="press h-11 px-3.5 rounded-xl bg-white/10 text-[13px] font-bold text-white hover:bg-white/15 transition-colors"
+              className="press h-11 shrink-0 px-3 rounded-xl border border-white/15 text-[13px] font-bold text-white hover:bg-white/10 transition-colors"
             >
               Share
             </button>
@@ -721,7 +728,7 @@ function GameSection({
   // Three numbers worth a glance, each a shortcut to the list behind it.
   const tiles: { label: string; value: number; of?: number; tone: string; href: string }[] = [
     { label: 'Paid', value: paid.length, tone: 'text-volt-300', href: `${gameHref}?tab=payments` },
-    { label: 'To pay', value: owing.length, tone: owing.length ? 'text-sun-400' : 'text-white', href: `${gameHref}?tab=payments` },
+    { label: 'Still owe', value: owing.length, tone: owing.length ? 'text-sun-400' : 'text-white', href: `${gameHref}?tab=payments` },
     rsvp?.requireRsvp
       ? rsvp.waitlist.length && rsvp.in.length >= rsvp.capacity
         ? { label: `In · ${rsvp.waitlist.length} waiting`, value: rsvp.in.length, of: rsvp.capacity, tone: 'text-white', href: `${gameHref}?tab=teams` }
@@ -731,10 +738,10 @@ function GameSection({
 
   return (
     <div>
-      <div className="flex items-start gap-2">
+      <div className="flex items-center gap-2">
       <Link href={gameHref} className="group flex-1 min-w-0 -mx-1 px-1 py-0.5 rounded-xl">
         <span className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold text-white/70">{heading}</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/65">{heading}</span>
           <span
             className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap animate-pop-in ${
               phase === 'matchday' ? 'bg-volt-400 text-ink' : notEnded ? 'bg-sun-400/15 text-sun-400' : 'bg-white/10 text-white/80'
@@ -745,7 +752,7 @@ function GameSection({
             {chip}
           </span>
         </span>
-        <span className="block font-display text-lg font-extrabold leading-tight mt-1 group-hover:text-volt-300 transition-colors">
+        <span className="block text-sm font-semibold text-white leading-tight mt-0.5 group-hover:text-volt-300 transition-colors">
           {when}
           {kickoff ? ` · ${prettyTime(kickoff)}` : ''}
         </span>
@@ -753,15 +760,19 @@ function GameSection({
       <CollapseButton open={open} onClick={onToggle} controls={bodyId} label="game details" onDark />
       </div>
 
-      {/* Folded: money against target and what's owed, in one line */}
+      {/* Folded: money against target, and who still owes as a shortcut */}
       {!open && (
-        <button onClick={onToggle} className="press animate-rise mt-2 w-full flex items-baseline gap-2 flex-wrap text-left text-xs font-bold text-white/75 tabular-nums">
-          <span className="font-display text-lg font-extrabold text-white">
-            {coveredByDues ? `${paid.length}/${payments.length} paid` : formatCurrency(collected)}
-          </span>
-          {!coveredByDues && <span>of {formatCurrency(target)}</span>}
-          {owing.length > 0 && <span className="text-sun-400">· {owing.length} to pay</span>}
-        </button>
+        <FoldedSummary
+          onExpand={onToggle}
+          value={coveredByDues ? `${paid.length}/${payments.length}` : formatCurrency(collected)}
+          valueTone="text-white"
+          caption={coveredByDues ? 'paid their dues' : `of ${formatCurrency(target)} collected`}
+          action={
+            owing.length > 0
+              ? { label: `${owing.length} player${owing.length === 1 ? '' : 's'} still owe${owing.length === 1 ? 's' : ''}`, href: `${gameHref}?tab=payments` }
+              : null
+          }
+        />
       )}
 
       <Collapse open={open} id={bodyId}>
@@ -776,7 +787,7 @@ function GameSection({
         ) : (
           <>
             <CountUpNaira value={collected} className="font-display text-[28px] font-extrabold leading-none" />
-            <span className="text-sm text-white/65 tabular-nums">of {formatCurrency(target)}</span>
+            <span className="text-sm text-white/65 tabular-nums">of {formatCurrency(target)} collected</span>
 
           </>
         )}
@@ -1130,5 +1141,65 @@ function localDay(iso: string) {
 const RefreshIcon = ({ spinning }: { spinning: boolean }) => (
   <svg className={`w-4 h-4 ${spinning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+  </svg>
+);
+
+/**
+ * A folded half of the home card: its main figure with a caption, and (when something needs the
+ * organiser) one shortcut to it. Tapping the figure unfolds the half.
+ */
+function FoldedSummary({
+  value,
+  valueTone,
+  caption,
+  action,
+  onExpand,
+}: {
+  value: string;
+  valueTone: string;
+  caption: string;
+  action: { label: string; href?: string; onClick?: () => void } | null;
+  onExpand: () => void;
+}) {
+  const pill =
+    'press w-full flex items-center gap-2 min-h-11 px-3 rounded-xl bg-sun-400/15 text-[13px] font-bold text-sun-400 hover:bg-sun-400/25 transition-colors';
+  const pillBody = action && (
+    <>
+      <LiveDot className="bg-sun-400" />
+      <span className="flex-1 min-w-0 truncate text-left">{action.label}</span>
+      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+      </svg>
+    </>
+  );
+  return (
+    <div className="animate-rise mt-3 rounded-2xl bg-white/[0.06] p-2">
+      <button onClick={onExpand} className="w-full text-left px-1.5 pt-1 pb-1.5">
+        <span className={`block font-display text-[22px] font-extrabold leading-none tabular-nums ${valueTone}`}>{value}</span>
+        <span className="block mt-1 text-xs font-semibold text-white/70">{caption}</span>
+      </button>
+      {action &&
+        (action.href ? (
+          <Link href={action.href} className={pill}>
+            {pillBody}
+          </Link>
+        ) : (
+          <button onClick={action.onClick} className={pill}>
+            {pillBody}
+          </button>
+        ))}
+    </div>
+  );
+}
+
+const CopySmall = () => (
+  <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+  </svg>
+);
+
+const TickSmall = () => (
+  <svg className="w-[18px] h-[18px] text-volt-300 animate-pop-in" fill="none" viewBox="0 0 24 24" strokeWidth={2.75} stroke="currentColor" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
   </svg>
 );

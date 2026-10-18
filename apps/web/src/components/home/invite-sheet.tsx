@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useToast } from '@/components/toast';
 import { SheetTitle } from '@/components/home/sheet-title';
 import { btnPrimary, btnSecondary } from '@/components/buttons';
+import { Collapse } from '@/components/collapse';
 
 /**
  * Bringing someone new in: the group link with Copy and WhatsApp, a QR code to scan at the
@@ -29,17 +30,36 @@ export function InviteSheet({
   const titleId = useId();
   const toast = useToast();
   const [showQr, setShowQr] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const qrId = useId();
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [busy, setBusy] = useState(false);
   // Bumped on each new link so the link box washes volt again.
   const [fresh, setFresh] = useState(0);
-  const text = `Join ${group.name} on PitchAside to see when we're playing and where to pay: ${billing.link}`;
+  const text = `Join ${group.name} on PitchAside to see when we're playing and where to pay:`;
 
   const copy = () =>
     navigator.clipboard.writeText(billing.link).then(
-      () => toast.success('Link copied'),
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1800);
+        toast.success('Link copied');
+      },
       () => toast.error('Could not copy. Press and hold the link to copy it instead.'),
     );
+
+  // The phone's own share menu (WhatsApp, SMS, Telegram…) where there is one, else WhatsApp.
+  async function share() {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: `Join ${group.name}`, text, url: billing.link });
+      } catch {
+        // They closed the share menu: nothing to do.
+      }
+      return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${billing.link}`)}`, '_blank', 'noopener');
+  }
 
   async function regenerate() {
     setConfirmRegen(false);
@@ -59,55 +79,73 @@ export function InviteSheet({
     <Sheet titleId={titleId} onClose={onClose} align="left">
       <SheetTitle id={titleId} title="Invite players" sub={`Anyone with the link can join ${group.name}`} onClose={onClose} />
 
-      <div key={fresh} className={`mt-4 rounded-2xl bg-chalk border border-gray-200 px-3.5 py-3 ${fresh ? 'animate-glow' : ''}`}>
-        <p className="text-[11px] font-bold text-gray-600">Group link</p>
-        <p className="mt-0.5 text-sm font-semibold text-ink break-all select-all">{billing.link}</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 mt-3">
+      {/* The link: one line, with its own copy button */}
+      <div
+        key={fresh}
+        className={`mt-4 flex items-center gap-2 rounded-2xl bg-chalk border border-gray-200 pl-3.5 pr-1.5 py-1.5 ${fresh ? 'animate-glow' : ''}`}
+      >
+        <span className="flex-1 min-w-0">
+          <span className="block text-[11px] font-bold text-gray-600">Group link</span>
+          <span className="block text-sm font-semibold text-ink truncate select-all">{billing.link.replace(/^https?:\/\//, '')}</span>
+        </span>
         <button
           onClick={copy}
-          className={btnPrimary}
+          aria-label="Copy group link"
+          className="press w-11 h-11 shrink-0 rounded-xl bg-white border border-gray-200 text-ink flex items-center justify-center hover:border-ink transition-colors"
         >
-          Copy link
-        </button>
-        <button
-          onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener')}
-          className="press min-h-12 flex items-center justify-center gap-2 rounded-2xl text-[15px] font-bold text-ink bg-[#25D366] hover:brightness-95 transition"
-        >
-          Send on WhatsApp
+          {copied ? <TickIcon /> : <CopyIcon />}
         </button>
       </div>
 
-      <button
-        onClick={() => setShowQr((s) => !s)}
-        aria-expanded={showQr}
-        className="mt-4 h-11 w-full flex items-center justify-between text-sm font-bold text-ink border-t border-gray-100"
-      >
-        {showQr ? 'Hide QR code' : 'Show QR code to scan'}
-        <svg className={`w-4 h-4 transition-transform ${showQr ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-        </svg>
-      </button>
-      {showQr && (
-        <div className="animate-pop-in flex flex-col items-center gap-2 pb-2">
-          <div className="rounded-2xl bg-white border border-gray-200 p-3">
-            <QRCodeCanvas value={billing.link} size={168} level="M" />
+      {/* One main way to send it, WhatsApp as the quick alternative */}
+      <div className="grid grid-cols-[1fr_auto] gap-2 mt-3">
+        <button onClick={share} className={btnPrimary}>
+          Share invite
+        </button>
+        <button
+          onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${billing.link}`)}`, '_blank', 'noopener')}
+          className={`${btnSecondary} px-3.5`}
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-[#25D366]" aria-hidden />
+          WhatsApp
+        </button>
+      </div>
+
+      {/* QR: opens just below, for new players standing next to you */}
+      <div className="mt-4 rounded-2xl border border-gray-200">
+        <button
+          onClick={() => setShowQr((s) => !s)}
+          aria-expanded={showQr}
+          aria-controls={qrId}
+          className="press w-full min-h-12 flex items-center gap-3 px-3.5 text-left"
+        >
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-bold text-ink">QR code</span>
+            <span className="block text-xs text-gray-600">For players standing next to you to scan</span>
+          </span>
+          <span className="shrink-0 text-sm font-bold text-pitch-700">{showQr ? 'Hide' : 'Show'}</span>
+        </button>
+        <Collapse open={showQr} id={qrId}>
+          <div className="flex flex-col items-center gap-2 pb-4">
+            <div className="rounded-2xl bg-white border border-gray-200 p-3">
+              <QRCodeCanvas value={billing.link} size={168} level="M" />
+            </div>
           </div>
-          <p className="text-[11px] text-gray-600">New players scan it with their camera to join</p>
-        </div>
-      )}
+        </Collapse>
+      </div>
 
       {canManage && (
-        <div className="mt-2 flex items-center gap-3 rounded-2xl border border-gray-200 px-3.5 py-3">
-          <span className="flex-1 min-w-0">
-            <span className="block text-sm font-bold text-ink">Reset link</span>
-            <span className="block text-xs text-gray-600 mt-0.5 leading-snug">
-              Makes a new link. The old one stops working straight away.
-            </span>
-          </span>
-          <button onClick={() => setConfirmRegen(true)} disabled={busy} className={`shrink-0 ${btnSecondary} min-h-11 px-3.5 text-sm`}>
-            {busy ? 'Resetting…' : 'Reset'}
+        <div className="mt-3 rounded-2xl bg-kit-500/[0.07] border border-kit-500/30 px-3.5 py-3">
+          <p className="text-sm font-bold text-ink">Reset link</p>
+          <p className="text-xs text-gray-700 mt-0.5 leading-snug">
+            Makes a new link. The old one stops working straight away, so anyone you&apos;ve sent it to will need the new one.
+          </p>
+          <button
+            onClick={() => setConfirmRegen(true)}
+            disabled={busy}
+            className="press mt-2 min-h-11 px-3.5 rounded-xl border border-[#b23a12] text-sm font-bold text-[#b23a12] hover:bg-kit-500/10 disabled:opacity-60 transition-colors"
+          >
+            {busy ? 'Resetting…' : 'Reset link…'}
           </button>
         </div>
       )}
@@ -124,3 +162,15 @@ export function InviteSheet({
     </Sheet>
   );
 }
+
+const CopyIcon = () => (
+  <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+  </svg>
+);
+
+const TickIcon = () => (
+  <svg className="w-[18px] h-[18px] text-pitch-600 animate-pop-in" fill="none" viewBox="0 0 24 24" strokeWidth={2.75} stroke="currentColor" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+  </svg>
+);

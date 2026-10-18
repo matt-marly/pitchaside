@@ -11,27 +11,40 @@ export interface QuickAction {
 }
 
 /**
- * A row of the things organisers reach for most, each an icon with its name under it (never an
- * icon on its own). They open sheets, so the home page stays short.
+ * The jobs organisers do every week, as a compact strip: an icon with a short name under it
+ * (never an icon on its own), and "More actions" for everything else.
  */
-export function QuickActions({ actions }: { actions: QuickAction[] }) {
+export function QuickActions({ actions, onMore }: { actions: QuickAction[]; onMore: () => void }) {
   if (!actions.length) return null;
   return (
-    <nav aria-label="Quick actions" className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))` }}>
-      {actions.map((a, i) => (
-        <button
-          key={a.key}
-          onClick={a.onClick}
-          style={stagger(i, 50, 250)}
-          className="press animate-rise group flex flex-col items-center justify-center gap-1.5 min-h-[76px] rounded-2xl bg-white border border-gray-200 shadow-card px-2 py-2.5 hover:border-ink transition-colors"
-        >
-          <span className="w-9 h-9 rounded-full bg-volt-300 text-ink flex items-center justify-center transition-transform group-hover:-translate-y-0.5">
-            {a.icon}
-          </span>
-          <span className="text-[12px] font-bold text-ink leading-tight text-center">{a.label}</span>
+    <section aria-labelledby="quick-actions" className="mt-4">
+      <div className="flex items-center justify-between mb-2">
+        <h2 id="quick-actions" className="text-base font-bold text-ink">
+          Quick actions
+        </h2>
+        <button onClick={onMore} className="press h-11 -my-2 -mr-1 px-1 inline-flex items-center gap-0.5 text-sm font-bold text-pitch-700 hover:text-ink">
+          More actions
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+          </svg>
         </button>
-      ))}
-    </nav>
+      </div>
+      <div className="grid rounded-3xl bg-white border border-gray-100 shadow-card p-1.5" style={{ gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))` }}>
+        {actions.map((a, i) => (
+          <button
+            key={a.key}
+            onClick={a.onClick}
+            style={stagger(i, 50, 250)}
+            className="press animate-rise group flex flex-col items-center justify-center gap-1 min-h-[64px] rounded-2xl px-1 py-2 hover:bg-chalk transition-colors"
+          >
+            <span className="w-9 h-9 rounded-full bg-volt-300 text-ink flex items-center justify-center transition-transform group-hover:-translate-y-0.5">
+              {a.icon}
+            </span>
+            <span className="text-[12px] font-bold text-ink leading-tight text-center whitespace-nowrap">{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
