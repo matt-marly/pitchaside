@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useToast } from '@/components/toast';
@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Sheet } from '@/components/sheet';
 import { EmptyState } from '@/components/empty-state';
 import { BallIcon } from '@/components/illustrations';
+import { SheetTitle } from '@/components/home/sheet-title';
 import {
   acceptTransferClaim,
   assignTransfer,
@@ -642,7 +643,6 @@ export function TransfersPanel({
   focusId?: string | null;
 }) {
   const toast = useToast();
-  const [selection, setSelection] = useState<Record<string, string>>({});
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [sim, setSim] = useState({ amount: String(fee), senderName: '', narration: '' });
   const [simulating, setSimulating] = useState(false);
@@ -669,18 +669,21 @@ export function TransfersPanel({
     );
   }, [focused]);
 
-  const pendingOptions = sessions
+  const pendingOptions: PendingOption[] = sessions
     .filter((s) => s.status !== 'cancelled')
     .flatMap((s) =>
       (s.payments ?? [])
         .filter((p) => p.status === 'pending')
         .map((p) => ({
           id: p.id,
-          label: `${p.player ? `${p.player.firstName} ${p.player.lastName}` : 'Player'} · ${
-            s.label ?? new Date(s.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-          } · ${formatCurrency(Number(p.amount))}`,
+          name: p.player ? `${p.player.firstName} ${p.player.lastName}` : 'Player',
+          nickname: p.player?.nickname ?? null,
+          what: s.label ?? new Date(s.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+          date: s.date,
+          amount: Number(p.amount),
         })),
     );
+  const [matching, setMatching] = useState<BankTransfer | null>(null);
 
   async function run(id: string, fn: () => Promise<unknown>, ok: string) {
     setWorkingId(id);
@@ -745,6 +748,19 @@ export function TransfersPanel({
 
   return (
     <div className="space-y-3">
+      {matching && (
+        <MatchPlayerSheet
+          transfer={matching}
+          options={pendingOptions}
+          busy={workingId === matching.id}
+          onClose={() => setMatching(null)}
+          onMatch={async (option) => {
+            const t = matching;
+            setMatching(null);
+            await run(t.id, () => assignTransfer(t.id, option.id), `Matched to ${option.name}`);
+          }}
+        />
+      )}
       {mockMode && (
         <form onSubmit={handleSimulate} className="bg-sky-300/30 border-2 border-dashed border-sky-300 rounded-3xl p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -925,35 +941,21 @@ export function TransfersPanel({
                       </div>
                     )}
                     {t.status === 'unmatched' && (
-                      <div className="pt-1 flex flex-col sm:flex-row gap-2">
-                        <select
-                          value={selection[t.id] ?? ''}
-                          onChange={(e) => setSelection({ ...selection, [t.id]: e.target.value })}
-                          className={`${input} flex-1`}
+                      <div className="pt-1 flex gap-2">
+                        <button
+                          disabled={workingId === t.id || pendingOptions.length === 0}
+                          onClick={() => setMatching(t)}
+                          className="flex-1 px-4 py-2.5 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-40 transition-colors"
                         >
-                          <option value="">Match to a pending payment…</option>
-                          {pendingOptions.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex gap-2">
-                          <button
-                            disabled={!selection[t.id] || workingId === t.id}
-                            onClick={() => run(t.id, () => assignTransfer(t.id, selection[t.id]), 'Payment matched')}
-                            className="flex-1 sm:flex-none px-4 py-2.5 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-40 transition-colors"
-                          >
-                            Match
-                          </button>
-                          <button
-                            disabled={workingId === t.id}
-                            onClick={() => run(t.id, () => ignoreTransfer(t.id), 'Transfer ignored')}
-                            className="px-4 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:border-ink disabled:opacity-40 transition-colors"
-                          >
-                            Ignore
-                          </button>
-                        </div>
+                          {pendingOptions.length === 0 ? 'Nobody owes right now' : 'Match to a player'}
+                        </button>
+                        <button
+                          disabled={workingId === t.id}
+                          onClick={() => run(t.id, () => ignoreTransfer(t.id), 'Transfer ignored')}
+                          className="px-4 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:border-ink disabled:opacity-40 transition-colors"
+                        >
+                          Ignore
+                        </button>
                       </div>
                     )}
                   </div>
@@ -964,5 +966,153 @@ export function TransfersPanel({
         </TransferDayList>
       )}
     </div>
+  );
+}
+
+interface PendingOption {
+  /** The payment (a player's due for one game or period) the transfer would pay. */
+  id: string;
+  name: string;
+  nickname: string | null;
+  what: string;
+  date: string;
+  amount: number;
+}
+
+const words = (s?: string | null) => (s ?? '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2);
+
+/**
+ * Why a due looks like the one this transfer was for: the sender's name or the narration mentions
+ * the player, and/or the amount is exactly what they owe. Only a hint for ordering the list; the
+ * organiser still picks.
+ */
+function likelyReasons(t: BankTransfer, o: PendingOption) {
+  const said = new Set([...words(t.senderName), ...words(t.narration)]);
+  const reasons: string[] = [];
+  if ([...words(o.name), ...words(o.nickname)].some((w) => said.has(w))) reasons.push('Name matches');
+  if (Number(t.amount) === o.amount) reasons.push('Same amount');
+  return reasons;
+}
+
+/** Picking whose due an unknown transfer pays: likely payers first, then everyone who owes, with search. */
+function MatchPlayerSheet({
+  transfer,
+  options,
+  busy,
+  onClose,
+  onMatch,
+}: {
+  transfer: BankTransfer;
+  options: PendingOption[];
+  busy: boolean;
+  onClose: () => void;
+  onMatch: (o: PendingOption) => void;
+}) {
+  const titleId = useId();
+  const [query, setQuery] = useState('');
+  const [picked, setPicked] = useState<string | null>(null);
+  const q = query.trim().toLowerCase();
+  const ranked = options
+    .filter((o) => !q || `${o.name} ${o.nickname ?? ''}`.toLowerCase().includes(q))
+    .map((o) => ({ o, reasons: likelyReasons(transfer, o) }))
+    .sort(
+      (a, b) =>
+        b.reasons.length - a.reasons.length ||
+        (b.reasons.includes('Name matches') ? 1 : 0) - (a.reasons.includes('Name matches') ? 1 : 0) ||
+        a.o.date.localeCompare(b.o.date) ||
+        a.o.name.localeCompare(b.o.name),
+    );
+  const likely = ranked.filter((r) => r.reasons.length);
+  const rest = ranked.filter((r) => !r.reasons.length);
+  const choice = options.find((o) => o.id === picked) ?? null;
+  const from = transfer.senderName || 'an unknown sender';
+
+  const list = (title: string, rows: typeof ranked) =>
+    rows.length > 0 && (
+      <section className="mt-4">
+        <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-600">{title}</h3>
+        <ul className="-mx-2" role="radiogroup" aria-label={title}>
+          {rows.map(({ o, reasons }) => {
+            const on = picked === o.id;
+            return (
+              <li key={o.id}>
+                <button
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setPicked(o.id)}
+                  className={`press w-full flex items-center gap-3 min-h-14 px-2 py-2 rounded-xl text-left transition-colors ${
+                    on ? 'bg-volt-300/50' : 'hover:bg-chalk'
+                  }`}
+                >
+                  <span className="w-9 h-9 shrink-0 rounded-full bg-chalk text-ink text-xs font-extrabold flex items-center justify-center" aria-hidden>
+                    {initials(o.name)}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-bold text-ink truncate">
+                      {o.name}
+                      {o.nickname ? <span className="font-semibold text-gray-500"> · {o.nickname}</span> : null}
+                    </span>
+                    <span className="block text-xs text-gray-600 truncate">
+                      Owes {formatCurrency(o.amount)} for {o.what}
+                    </span>
+                    {reasons.length > 0 && (
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {reasons.map((r) => (
+                          <span key={r} className="px-1.5 py-0.5 rounded-md bg-volt-300 text-[10px] font-extrabold text-ink">
+                            {r}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={`w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center ${on ? 'border-ink bg-ink' : 'border-gray-300'}`}
+                    aria-hidden
+                  >
+                    {on && <span className="w-2 h-2 rounded-full bg-volt-300" />}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    );
+
+  return (
+    <Sheet
+      titleId={titleId}
+      onClose={onClose}
+      align="left"
+      footer={
+        <button
+          disabled={!choice || busy}
+          onClick={() => choice && onMatch(choice)}
+          className="w-full h-12 rounded-2xl bg-ink text-volt-300 text-[15px] font-extrabold hover:bg-pitch-900 disabled:opacity-40 transition-colors"
+        >
+          {choice ? `Match to ${choice.name}` : 'Pick who sent it'}
+        </button>
+      }
+    >
+      <SheetTitle
+        id={titleId}
+        title={`Who sent ${formatCurrency(Number(transfer.amount))}?`}
+        sub={`From ${from}${transfer.narration ? ` · “${transfer.narration}”` : ''}. It pays the due you pick.`}
+        onClose={onClose}
+      />
+      {options.length > 6 && (
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search players"
+          aria-label="Search players"
+          className="mt-4 w-full h-11 px-3.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
+        />
+      )}
+      {list('Likely', likely)}
+      {list(likely.length ? 'Everyone else who owes' : 'Everyone who owes', rest)}
+      {ranked.length === 0 && <p className="mt-6 text-sm text-gray-600 text-center">No one by that name owes right now.</p>}
+    </Sheet>
   );
 }

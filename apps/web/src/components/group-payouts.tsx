@@ -27,6 +27,34 @@ const statusStyles: Record<OutgoingTransfer['status'], string> = {
   cancelled: 'bg-gray-100 text-gray-500',
 };
 
+/** What withdrawing is, before the first thing it asks for (a PIN) makes sense. */
+function WithdrawIntro() {
+  const steps = [
+    ['Set a 4-digit PIN', 'You type it each time money leaves the account, so nobody else can send it.'],
+    ['Pick who gets paid', 'Save the pitch owner once, or send to any Nigerian bank account.'],
+    ['Send', 'The money leaves the group account, and every withdrawal is listed here.'],
+  ];
+  return (
+    <div className="bg-white rounded-3xl border border-gray-100 shadow-card p-5">
+      <h3 className="text-base font-bold text-ink">Withdraw from the group account</h3>
+      <p className="text-xs text-gray-600 mt-1">Pay the pitch, buy bibs or refund a player, straight from what&apos;s been collected.</p>
+      <ol className="mt-4 space-y-3">
+        {steps.map(([title, body], i) => (
+          <li key={title} className="flex gap-3">
+            <span className="w-6 h-6 shrink-0 rounded-full bg-ink text-volt-300 text-xs font-extrabold flex items-center justify-center" aria-hidden>
+              {i + 1}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-ink">{title}</span>
+              <span className="block text-xs text-gray-600">{body}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function SetPinForm({ onDone }: { onDone: () => void }) {
   const toast = useToast();
   const [pin, setPin] = useState('');
@@ -135,7 +163,12 @@ export function PayoutsPanel({
   }
 
   if (hasPin === false) {
-    return <SetPinForm onDone={() => setHasPin(true)} />;
+    return (
+      <div className="space-y-3">
+        <WithdrawIntro />
+        <SetPinForm onDone={() => setHasPin(true)} />
+      </div>
+    );
   }
 
   return (

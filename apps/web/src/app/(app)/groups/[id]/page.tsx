@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { BackButton } from '@/components/back-button';
@@ -16,6 +16,15 @@ import { frequencyLabel, frequencyOptions } from '@/lib/billing';
 import { LeagueTableView } from '@/components/ratings';
 import { ContributionsVisibilityPicker } from '@/components/contributions-visibility';
 import { RsvpToggle } from '@/components/rsvp-toggle';
+import { AccountDetailsSheet, MoneyCard, PlusIcon, daysFromToday, gameDay, gameStatusOf, useGroupMoney } from '@/components/money-card';
+import { InviteSheet } from '@/components/home/invite-sheet';
+import { InviteIcon, ICON_PATHS, icon } from '@/components/home/quick-actions';
+import { SheetTitle } from '@/components/home/sheet-title';
+import { Sheet } from '@/components/sheet';
+import { btnSecondary } from '@/components/buttons';
+import { stagger } from '@/components/motion';
+import { GamesList } from '@/components/group/games-list';
+import { MemberSheet, type MemberDue } from '@/components/group/member-sheet';
 import { useAuth } from '@/lib/auth';
 import {
   getGroup,
@@ -27,24 +36,24 @@ import {
   deleteGroup,
   updateGroup,
   formatCurrency,
-  getGroupBalance,
-  getGroupBilling,
   getGroupTable,
-  getGroupTransfers,
-  type BankTransfer,
   type LeagueTable,
-  type GroupBilling,
   type IGroupWithMembers,
   type ISessionWithDetails,
 } from '@/lib/api';
-import { PaymentType } from '@pitchaside/shared';
+import { PaymentStatus, PaymentType, UserRole } from '@pitchaside/shared';
 import type { ContributionsVisibility, IPlayer } from '@pitchaside/shared';
 
-const statusStyles: Record<string, string> = {
-  upcoming: 'bg-volt-300 text-ink',
-  completed: 'bg-ink text-white',
-  cancelled: 'bg-kit-500/15 text-kit-600',
-};
+type Tab = 'members' | 'games' | 'table' | 'money';
+
+/** Old links (?tab=sessions / transfers / payouts, e.g. Withdraw on the home) still land in the right place. */
+function tabFromUrl(t: string | null): { tab: Tab; money: 'transfers' | 'payouts' } {
+  if (t === 'sessions' || t === 'games') return { tab: 'games', money: 'transfers' };
+  if (t === 'table') return { tab: 'table', money: 'transfers' };
+  if (t === 'transfers' || t === 'money') return { tab: 'money', money: 'transfers' };
+  if (t === 'payouts') return { tab: 'money', money: 'payouts' };
+  return { tab: 'members', money: 'transfers' };
+}
 
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -56,15 +65,19 @@ export default function GroupDetailPage() {
   const [allPlayers, setAllPlayers] = useState<IPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab');
-  const [tab, setTab] = useState<'members' | 'sessions' | 'table' | 'transfers' | 'payouts'>(
-    initialTab === 'sessions' || initialTab === 'table' || initialTab === 'transfers' || initialTab === 'payouts' ? initialTab : 'members',
-  );
+  const [tab, setTab] = useState<Tab>(() => tabFromUrl(searchParams.get('tab')).tab);
+  const [moneyView, setMoneyView] = useState<'transfers' | 'payouts'>(() => tabFromUrl(searchParams.get('tab')).money);
   const [table, setTable] = useState<LeagueTable | null>(null);
-  const [billing, setBilling] = useState<GroupBilling | null>(null);
-  const [transfers, setTransfers] = useState<BankTransfer[]>([]);
+  // Balance, account and transfers, kept fresh the same way as on the home.
+  const money = useGroupMoney(id, null);
+  const billing = money.billing;
   const [focusTransfer, setFocusTransfer] = useState<string | null>(searchParams.get('transfer'));
-  const [balance, setBalance] = useState<number | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [openMember, setOpenMember] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [memberFilter, setMemberFilter] = useState<'all' | 'owes' | 'paid'>('all');
 
   // Add member state
   const [showAddMember, setShowAddMember] = useState(false);
@@ -109,24 +122,12 @@ export default function GroupDetailPage() {
       })
       .catch(() => router.push('/groups'))
       .finally(() => setLoading(false));
-    // Billing loads separately so a PulseMFB hiccup never blocks the page.
-    getGroupBilling(id).then(setBilling).catch(() => {});
-    getGroupBalance(id).then((b) => setBalance(b.available)).catch(() => {});
-    getGroupTransfers(id).then(setTransfers).catch(() => {});
     getGroupTable(id).then(setTable).catch(() => {});
   }, [id, router]);
 
   async function refreshPayments() {
-    const [s, t, b, bal] = await Promise.all([
-      getSessions(id),
-      getGroupTransfers(id),
-      getGroupBilling(id),
-      getGroupBalance(id).catch(() => null),
-    ]);
+    const [s] = await Promise.all([getSessions(id), money.reload()]);
     setSessions(s);
-    setTransfers(t);
-    setBilling(b);
-    if (bal) setBalance(bal.available);
   }
 
   function startEdit() {
@@ -174,10 +175,11 @@ export default function GroupDetailPage() {
   }
 
   async function handleDeleteGroup() {
+    setShowMenu(false);
     setConfirm({
-      title: 'Delete Group',
-      message: `Are you sure you want to delete "${group?.name}"? This cannot be undone.`,
-      confirmLabel: 'Delete',
+      title: 'Delete this group?',
+      message: `Are you sure you want to delete "${group?.name}"? This can't be undone.`,
+      confirmLabel: 'Delete group',
       variant: 'danger',
       onConfirm: async () => {
         setConfirm(null);
@@ -227,12 +229,12 @@ export default function GroupDetailPage() {
 
   function handleRemoveMember(playerId: string, playerName: string, credit = 0) {
     setConfirm({
-      title: 'Remove Member',
+      title: `Remove ${playerName}?`,
       // Their credit is dropped with them, so say how much before it goes.
       message:
         credit > 0
           ? `${playerName} has ${formatCurrency(credit)} credit in this group that hasn't paid a due yet. Removing them drops it from the books, so refund them first if it's owed back. Remove anyway?`
-          : `Remove ${playerName} from this group?`,
+          : `${playerName} comes off this group's list.`,
       confirmLabel: credit > 0 ? 'Remove anyway' : 'Remove',
       variant: 'danger',
       onConfirm: async () => {
@@ -254,9 +256,9 @@ export default function GroupDetailPage() {
       <div className="p-4 sm:p-6 max-w-2xl mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-5 bg-gray-200 rounded w-20" />
-          <div className="h-32 bg-gray-100 rounded-2xl" />
-          <div className="h-10 bg-gray-100 rounded-xl" />
-          <div className="h-16 bg-gray-100 rounded-xl" />
+          <div className="h-20 bg-gray-100 rounded-2xl" />
+          <div className="h-48 bg-gray-100 rounded-[28px]" />
+          <div className="h-12 bg-gray-100 rounded-xl" />
           <div className="h-16 bg-gray-100 rounded-xl" />
         </div>
       </div>
@@ -268,6 +270,58 @@ export default function GroupDetailPage() {
   const memberCount = group.memberships?.length || 0;
   const myEmail = user?.email.trim().toLowerCase();
   const imAMember = group.memberships?.some((m) => m.player.email?.trim().toLowerCase() === myEmail);
+  const canManage = user?.role !== UserRole.TREASURER;
+  const unmatched = billing?.unmatchedTransfers ?? 0;
+
+  // What each member's row says about money: the next game (or this period's dues, for groups
+  // that collect monthly/weekly), so "who still owes" reads straight off the list.
+  const perGame = group.paymentType === PaymentType.PER_SESSION;
+  const nextDue = perGame
+    ? sessions
+        .filter((s) => s.kind !== 'dues' && s.status === 'upcoming' && daysFromToday(s.date) >= 0)
+        .sort((a, b) => gameDay(a.date).getTime() - gameDay(b.date).getTime())[0]
+    : sessions
+        .filter((s) => s.kind === 'dues' && s.status !== 'cancelled')
+        .sort((a, b) => gameDay(b.date).getTime() - gameDay(a.date).getTime())
+        .find((s) => daysFromToday(s.date) <= 0);
+  const dueLabel = nextDue
+    ? nextDue.kind === 'dues' && nextDue.label
+      ? `${nextDue.label} dues`
+      : gameDay(nextDue.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    : '';
+  const dueOf = (playerId: string): MemberDue => {
+    if (!nextDue) return null;
+    const p = nextDue.payments?.find((x) => x.playerId === playerId);
+    if (!p) return group.requireRsvp ? { label: dueLabel, state: 'out', amount: 0 } : null;
+    const st = gameStatusOf(p);
+    return {
+      label: dueLabel,
+      state: st === PaymentStatus.PAID ? 'paid' : st === PaymentStatus.WAIVED ? 'waived' : 'owes',
+      amount: Number(p.amount),
+    };
+  };
+  const members = (group.memberships ?? []).map((m) => ({ ...m, due: dueOf(m.player.id) }));
+  const paidCount = members.filter((m) => m.due?.state === 'paid').length;
+  const owesCount = members.filter((m) => m.due?.state === 'owes').length;
+  const q = query.trim().toLowerCase();
+  const shown = members
+    .filter((m) => memberFilter === 'all' || m.due?.state === memberFilter)
+    .filter((m) => !q || `${m.player.firstName} ${m.player.lastName} ${m.player.nickname ?? ''}`.toLowerCase().includes(q))
+    .sort((a, b) => `${a.player.firstName} ${a.player.lastName}`.localeCompare(`${b.player.firstName} ${b.player.lastName}`));
+  const opened = members.find((m) => m.player.id === openMember);
+
+  const tabs: { key: Tab; label: string; badge?: number }[] = [
+    { key: 'members', label: 'Members' },
+    { key: 'games', label: perGame ? 'Games' : 'Dues' },
+    { key: 'table', label: 'Table' },
+    { key: 'money', label: 'Money', badge: unmatched },
+  ];
+
+  const meta = [
+    group.location,
+    group.schedule,
+    `${formatCurrency(group.feePerPlayer)} ${perGame ? 'a game' : frequencyLabel(group.paymentType).toLowerCase()}`,
+  ].filter(Boolean);
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
@@ -282,6 +336,40 @@ export default function GroupDetailPage() {
         onConfirm={confirm?.onConfirm ?? (() => {})}
         onCancel={() => setConfirm(null)}
       />
+      {showMenu && (
+        <GroupMenuSheet
+          name={group.name}
+          onEdit={() => {
+            setShowMenu(false);
+            startEdit();
+          }}
+          onDelete={handleDeleteGroup}
+          onClose={() => setShowMenu(false)}
+        />
+      )}
+      {showInvite && billing && (
+        <InviteSheet group={group} billing={billing} canManage={canManage} onBilling={money.setBilling} onClose={() => setShowInvite(false)} />
+      )}
+      {showAccount && billing && <AccountDetailsSheet group={group} billing={billing} onClose={() => setShowAccount(false)} />}
+      {opened && (
+        <MemberSheet
+          key={opened.player.id}
+          player={opened.player}
+          joinedAt={opened.joinedAt}
+          credit={Number(opened.credit ?? 0)}
+          due={opened.due}
+          onClose={() => setOpenMember(null)}
+          onSaved={(p) =>
+            setGroup((g) =>
+              g ? { ...g, memberships: g.memberships?.map((m) => (m.player.id === p.id ? { ...m, player: { ...m.player, ...p } } : m)) } : g,
+            )
+          }
+          onRemove={() => {
+            setOpenMember(null);
+            handleRemoveMember(opened.player.id, `${opened.player.firstName} ${opened.player.lastName}`, Number(opened.credit ?? 0));
+          }}
+        />
+      )}
 
       {/* Header */}
       {editing ? (
@@ -391,166 +479,154 @@ export default function GroupDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="relative mb-6 bg-white rounded-3xl border border-gray-100 shadow-card p-5 overflow-hidden">
-          <div className="absolute inset-0 chalk-dots opacity-70 pointer-events-none" />
-          <div className="relative flex items-start justify-between mb-4 gap-3">
-            <div className="flex items-start gap-3.5 min-w-0">
-              <JerseyBadge label={group.name.charAt(0).toUpperCase()} name={group.name} className="w-16 h-16 shrink-0 -mt-1" />
-              <div className="min-w-0">
-                <h1 className="text-[28px] leading-tight font-extrabold text-ink"><KeepHyphens text={group.name} /></h1>
-                {group.description && (
-                  <p className="text-sm text-gray-500 mt-0.5">{group.description}</p>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-1.5 shrink-0">
-              <button
-                onClick={startEdit}
-                className="p-2.5 text-gray-500 bg-white border border-gray-200 rounded-xl hover:text-ink hover:border-gray-300 transition-colors"
-                title="Edit group"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                </svg>
-              </button>
-              <button
-                onClick={handleDeleteGroup}
-                className="p-2.5 text-gray-500 bg-white border border-gray-200 rounded-xl hover:text-kit-600 hover:border-kit-400 transition-colors"
-                title="Delete group"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </button>
-            </div>
+        <div className="mb-3 flex items-center gap-3">
+          <JerseyBadge label={group.name.charAt(0).toUpperCase()} name={group.name} className="w-12 h-12 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[22px] leading-tight font-extrabold text-ink line-clamp-2"><KeepHyphens text={group.name} /></h1>
+            <p className="text-xs font-semibold text-gray-600 mt-0.5 line-clamp-2">{meta.join(' · ')}</p>
           </div>
-
-          {/* Meta pills */}
-          <div className="relative flex flex-wrap gap-2 text-xs">
-            {group.location && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-chalk border border-gray-200 text-gray-700 font-semibold rounded-full">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                </svg>
-                {group.location}
-              </span>
-            )}
-            {group.schedule && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-chalk border border-gray-200 text-gray-700 font-semibold rounded-full">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                </svg>
-                {group.schedule}
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-chalk border border-gray-200 text-gray-700 font-semibold rounded-full tabular-nums">
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-              </svg>
-              {memberCount}/{group.targetPlayers}
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-volt-300 border border-volt-400 text-ink font-bold rounded-full tabular-nums">
-              {formatCurrency(group.feePerPlayer)}/player
-            </span>
-            <span className="px-2.5 py-1 bg-chalk border border-gray-200 text-gray-700 font-semibold rounded-full capitalize">
-              {frequencyLabel(group.paymentType)}
-            </span>
-          </div>
+          <button
+            onClick={() => setShowMenu(true)}
+            aria-label="Group options"
+            aria-haspopup="dialog"
+            className="press w-11 h-11 shrink-0 rounded-full bg-white border border-gray-200 text-ink flex items-center justify-center hover:border-ink transition-colors"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <circle cx="5" cy="12" r="1.9" />
+              <circle cx="12" cy="12" r="1.9" />
+              <circle cx="19" cy="12" r="1.9" />
+            </svg>
+          </button>
         </div>
       )}
 
-      {!editing && billing && (
+      {/* The account: the home's card when there is one, the set-up card when there isn't yet */}
+      {!editing && billing && !billing.account && (
         <GroupAccountCard
           groupId={id}
           groupName={group.name}
           fee={Number(group.feePerPlayer)}
           billing={billing}
-          balance={balance}
-          onChange={setBilling}
+          balance={money.balance?.available ?? null}
+          onChange={money.setBilling}
           onMatchTransfer={(transferId) => {
             setFocusTransfer(transferId);
-            setTab('transfers');
+            setTab('money');
+            setMoneyView('transfers');
           }}
         />
       )}
+      {!editing && (!billing || billing.account) && (
+        <MoneyCard
+          group={group}
+          money={money}
+          gameFallback={null}
+          canManage={canManage}
+          showGame={false}
+          onScheduleGame={() => setShowCreateSession(true)}
+          onOpenAccount={() => setShowAccount(true)}
+        />
+      )}
+
+      {/* Bringing people in: the same sheet as Invite on the home */}
+      {!editing && billing?.account && (
+        <button
+          onClick={() => setShowInvite(true)}
+          className="press mt-3 w-full flex items-center gap-3 min-h-14 px-4 py-2.5 bg-white rounded-2xl border border-gray-100 shadow-card text-left hover:border-gray-300 transition-colors"
+        >
+          <span className="w-9 h-9 shrink-0 rounded-xl bg-volt-300 text-ink flex items-center justify-center">
+            <InviteIcon />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-bold text-ink">Invite players</span>
+            <span className="block text-xs text-gray-600 truncate">Share the group link or QR code</span>
+          </span>
+          <svg className="w-4 h-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+      )}
 
       {/* Tabs */}
-      <div className="flex p-1 bg-white border border-gray-200 rounded-2xl mb-4">
-        <button
-          onClick={() => setTab('members')}
-          className={`flex-1 px-1 py-2.5 text-xs sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors ${
-            tab === 'members' ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
-          }`}
-        >
-          Members<span className="hidden sm:inline"> ({memberCount})</span>
-        </button>
-        <button
-          onClick={() => setTab('sessions')}
-          className={`flex-1 px-1 py-2.5 text-xs sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors ${
-            tab === 'sessions' ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
-          }`}
-        >
-          {group.paymentType === PaymentType.PER_SESSION ? 'Sessions' : 'Dues'}<span className="hidden sm:inline"> ({sessions.length})</span>
-        </button>
-        <button
-          onClick={() => setTab('table')}
-          className={`flex-1 px-1 py-2.5 text-xs sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors ${
-            tab === 'table' ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
-          }`}
-        >
-          Table
-        </button>
-        <button
-          onClick={() => setTab('transfers')}
-          className={`relative flex-1 px-1 py-2.5 text-xs sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors ${
-            tab === 'transfers' ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
-          }`}
-        >
-          Transfers
-          {billing && billing.unmatchedTransfers > 0 && (
-            <span className="absolute -top-2 right-0 sm:top-1 sm:right-2 min-w-5 h-5 px-1 rounded-full bg-kit-500 text-white text-[10px] font-extrabold flex items-center justify-center">
-              {billing.unmatchedTransfers}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setTab('payouts')}
-          className={`flex-1 px-1 py-2.5 text-xs sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors ${
-            tab === 'payouts' ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
-          }`}
-        >
-          Payouts
-        </button>
+      <div role="tablist" aria-label={`${group.name} sections`} className="mt-5 flex p-1 bg-white border border-gray-200 rounded-2xl mb-4">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => setTab(t.key)}
+            className={`press relative flex-1 min-h-11 px-1 text-[13px] sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors ${
+              tab === t.key ? 'bg-ink text-volt-300' : 'text-gray-600 hover:text-ink'
+            }`}
+          >
+            {t.label}
+            {!!t.badge && (
+              <span
+                className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-kit-500 text-ink text-[10px] font-extrabold flex items-center justify-center"
+                aria-label={`${t.badge} to match`}
+              >
+                {t.badge}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {tab === 'table' && (table ? <LeagueTableView table={table} /> : <div className="h-40 bg-gray-100 rounded-3xl animate-pulse" />)}
 
-      {tab === 'transfers' && (
-        <TransfersPanel
-          groupId={id}
-          fee={Number(group.feePerPlayer)}
-          transfers={transfers}
-          sessions={sessions}
-          mockMode={billing?.providerMode === 'mock'}
-          onRefresh={refreshPayments}
-          focusId={focusTransfer}
-        />
-      )}
-
-      {tab === 'payouts' && (
-        <PayoutsPanel
-          groupId={id}
-          groupName={group.name}
-          refundable={(group.memberships ?? [])
-            .filter((m) => Number(m.credit ?? 0) > 0)
-            .map((m) => ({ playerId: m.player.id, name: `${m.player.firstName} ${m.player.lastName}`, credit: Number(m.credit) }))}
-          onRefresh={async () => {
-            await refreshPayments();
-            // A refund changes the member's credit.
-            setGroup(await getGroup(id));
-          }}
-        />
+      {/* Money: what's come in, and what's gone out */}
+      {tab === 'money' && (
+        <div>
+          <div role="radiogroup" aria-label="Show" className="mb-3 grid grid-cols-2 p-1 rounded-full bg-chalk border border-gray-200">
+            {(
+              [
+                { key: 'transfers', label: 'Money in', badge: unmatched },
+                { key: 'payouts', label: 'Withdrawals', badge: 0 },
+              ] as const
+            ).map((v) => (
+              <button
+                key={v.key}
+                role="radio"
+                aria-checked={moneyView === v.key}
+                onClick={() => setMoneyView(v.key)}
+                className={`press min-h-10 rounded-full text-[13px] font-bold inline-flex items-center justify-center gap-1.5 transition-colors ${
+                  moneyView === v.key ? 'bg-white text-ink shadow-card' : 'text-gray-600 hover:text-ink'
+                }`}
+              >
+                {v.label}
+                {v.badge > 0 && (
+                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-sun-400 text-ink text-[10px] font-extrabold inline-flex items-center justify-center">
+                    {v.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          {moneyView === 'transfers' ? (
+            <TransfersPanel
+              groupId={id}
+              fee={Number(group.feePerPlayer)}
+              transfers={money.transfers ?? []}
+              sessions={sessions}
+              mockMode={billing?.providerMode === 'mock'}
+              onRefresh={refreshPayments}
+              focusId={focusTransfer}
+            />
+          ) : (
+            <PayoutsPanel
+              groupId={id}
+              groupName={group.name}
+              refundable={(group.memberships ?? [])
+                .filter((m) => Number(m.credit ?? 0) > 0)
+                .map((m) => ({ playerId: m.player.id, name: `${m.player.firstName} ${m.player.lastName}`, credit: Number(m.credit) }))}
+              onRefresh={async () => {
+                await refreshPayments();
+                // A refund changes the member's credit.
+                setGroup(await getGroup(id));
+              }}
+            />
+          )}
+        </div>
       )}
 
       {/* Members Tab */}
@@ -565,37 +641,51 @@ export default function GroupDetailPage() {
               <button
                 onClick={handleAddMe}
                 disabled={addingMe}
-                className="shrink-0 px-3.5 py-2 bg-ink text-volt-300 text-sm font-bold rounded-xl hover:bg-pitch-900 disabled:opacity-50 transition-colors"
+                className="shrink-0 min-h-11 px-3.5 bg-ink text-volt-300 text-sm font-bold rounded-xl hover:bg-pitch-900 disabled:opacity-50 transition-colors"
               >
                 {addingMe ? 'Adding…' : 'Add me'}
               </button>
             </div>
           )}
 
-          <button
-            onClick={() => setShowAddMember(!showAddMember)}
-            className="w-full mb-3 py-3 text-sm font-bold text-ink border-2 border-dashed border-gray-300 rounded-2xl hover:border-ink hover:bg-white transition-colors"
-          >
-            + Add Member
-          </button>
+          {/* Who's here, and where the next game's money stands */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[15px] font-extrabold text-ink tabular-nums">
+                {memberCount} member{memberCount === 1 ? '' : 's'}
+                <span className="font-semibold text-gray-500"> · {group.targetPlayers} spots a game</span>
+              </p>
+              {nextDue && (
+                <p className="text-xs text-gray-600 tabular-nums">
+                  {dueLabel}: {paidCount} paid · {owesCount} owe
+                </p>
+              )}
+            </div>
+            <button onClick={() => setShowAddMember(!showAddMember)} aria-expanded={showAddMember} className={`${btnSecondary} !min-h-11 !px-3.5 !text-sm shrink-0`}>
+              <PlusIcon />
+              Add
+            </button>
+          </div>
 
           {showAddMember && (
-            <div className="bg-white border border-gray-100 shadow-card rounded-3xl p-5 mb-3 space-y-3 animate-fade-in-up">
+            <div className="bg-white border border-gray-100 shadow-card rounded-3xl p-5 mt-3 space-y-3 animate-fade-in-up">
               {availablePlayers.length === 0 ? (
-                <p className="text-sm text-gray-500">
-                  No available players.{' '}
-                  <Link href="/players/new" className="text-pitch-600 font-medium hover:underline">
-                    Register one
-                  </Link>
+                <p className="text-sm text-gray-600">
+                  Everyone you&apos;ve added is already in this group.{' '}
+                  <Link href="/players/new" className="text-pitch-600 font-bold hover:underline">
+                    Add a new player
+                  </Link>{' '}
+                  or invite them with the group link.
                 </p>
               ) : (
                 <>
                   <select
                     value={selectedPlayerId}
                     onChange={(e) => setSelectedPlayerId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
+                    aria-label="Player to add"
+                    className="w-full min-h-11 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
                   >
-                    <option value="">Select a player...</option>
+                    <option value="">Pick one of your players…</option>
                     {availablePlayers.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.firstName} {p.lastName}
@@ -605,9 +695,9 @@ export default function GroupDetailPage() {
                   <button
                     onClick={handleAddMember}
                     disabled={!selectedPlayerId || addingMember}
-                    className="w-full py-2.5 bg-ink text-volt-300 text-sm font-bold rounded-xl hover:bg-pitch-900 disabled:opacity-50 transition-colors"
+                    className="w-full min-h-11 py-2.5 bg-ink text-volt-300 text-sm font-bold rounded-xl hover:bg-pitch-900 disabled:opacity-50 transition-colors"
                   >
-                    {addingMember ? 'Adding...' : 'Add to Group'}
+                    {addingMember ? 'Adding…' : 'Add to group'}
                   </button>
                 </>
               )}
@@ -615,124 +705,156 @@ export default function GroupDetailPage() {
           )}
 
           {!group.memberships?.length ? (
-            <EmptyState
-              icon="users"
-              title="No members yet"
-              description="Add players to this group so payments can be tracked."
-            />
+            <div className="mt-3">
+              <EmptyState icon="users" title="No members yet" description="Invite players with the group link, or add them yourself." />
+            </div>
           ) : (
-            <div className="grid sm:grid-cols-2 gap-2">
-              {group.memberships.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-center justify-between bg-white p-3 rounded-2xl border border-gray-100 shadow-card hover:border-gray-300 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full ${kitFor(`${m.player.firstName} ${m.player.lastName}`).bg} ${kitFor(`${m.player.firstName} ${m.player.lastName}`).fg} flex items-center justify-center text-sm font-extrabold font-display`}>
-                      {m.player.firstName.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-ink">
-                        {m.player.firstName} {m.player.lastName}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        <span className="capitalize">{m.role}</span>
-                        {Number(m.credit) > 0 && (
-                          <span className="ml-1.5 font-bold text-pitch-600">· {formatCurrency(Number(m.credit))} credit</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      handleRemoveMember(
-                        m.player.id,
-                        `${m.player.firstName} ${m.player.lastName}`,
-                        Number(m.credit ?? 0)
-                      )
-                    }
-                    className="p-1.5 text-gray-300 hover:text-kit-600 transition-colors"
-                    title="Remove member"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+            <>
+              {memberCount > 6 && (
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by name or nickname"
+                  aria-label="Search members"
+                  className="mt-3 w-full h-11 px-3.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-volt-300/70 focus:border-pitch-600"
+                />
+              )}
+              {nextDue && (
+                <div className="mt-2.5 flex gap-2" role="radiogroup" aria-label="Show members">
+                  {(
+                    [
+                      { key: 'all', label: `All ${memberCount}` },
+                      { key: 'owes', label: `Owe ${owesCount}` },
+                      { key: 'paid', label: `Paid ${paidCount}` },
+                    ] as const
+                  ).map((f) => (
+                    <button
+                      key={f.key}
+                      role="radio"
+                      aria-checked={memberFilter === f.key}
+                      onClick={() => setMemberFilter(f.key)}
+                      className={`press min-h-9 px-3.5 rounded-full text-xs font-bold tabular-nums transition-colors ${
+                        memberFilter === f.key ? 'bg-ink text-volt-300' : 'bg-white border border-gray-200 text-gray-700 hover:border-ink'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+
+              {shown.length === 0 ? (
+                <p className="mt-6 text-sm text-gray-600 text-center">
+                  {q ? `Nobody called “${query.trim()}”.` : memberFilter === 'owes' ? 'Nobody owes. Everyone in has paid.' : 'Nobody has paid yet.'}
+                </p>
+              ) : (
+                <ul className="mt-3 bg-white rounded-2xl border border-gray-100 shadow-card divide-y divide-gray-100 overflow-hidden">
+                  {shown.map((m, i) => {
+                    const name = `${m.player.firstName} ${m.player.lastName}`;
+                    const kit = kitFor(name);
+                    const credit = Number(m.credit ?? 0);
+                    const pill =
+                      m.due?.state === 'paid'
+                        ? { text: 'Paid', cls: 'bg-volt-300 text-ink' }
+                        : m.due?.state === 'owes'
+                          ? { text: 'Owes', cls: 'bg-sun-400/25 text-amber-800' }
+                          : m.due?.state === 'waived'
+                            ? { text: 'Waived', cls: 'bg-chalk text-gray-600' }
+                            : m.due?.state === 'out'
+                              ? { text: 'Not in', cls: 'text-gray-500' }
+                              : null;
+                    return (
+                      <li key={m.id} className={i < 12 ? 'animate-rise' : undefined} style={i < 12 ? stagger(i, 25) : undefined}>
+                        <button
+                          onClick={() => setOpenMember(m.player.id)}
+                          className="press w-full flex items-center gap-3 px-3.5 py-2.5 min-h-[60px] text-left hover:bg-chalk transition-colors"
+                        >
+                          <span className={`w-9 h-9 shrink-0 rounded-full ${kit.bg} ${kit.fg} flex items-center justify-center text-sm font-extrabold font-display`} aria-hidden>
+                            {m.player.firstName.charAt(0)}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-bold text-ink truncate">
+                              {name}
+                              {m.player.nickname && <span className="font-semibold text-gray-500"> · {m.player.nickname}</span>}
+                            </span>
+                            <span className="block text-xs text-gray-600 truncate">
+                              Joined {new Date(m.joinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                              {m.role !== 'player' && <span className="capitalize"> · {m.role}</span>}
+                              {credit > 0 && <span className="font-bold text-pitch-600"> · {formatCurrency(credit)} credit</span>}
+                            </span>
+                          </span>
+                          {pill && (
+                            <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-extrabold tabular-nums whitespace-nowrap ${pill.cls}`}>{pill.text}</span>
+                          )}
+                          <svg className="w-4 h-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                          </svg>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
           )}
         </div>
       )}
 
-      {/* Sessions Tab */}
-      {tab === 'sessions' && (
+      {/* Games Tab */}
+      {tab === 'games' && (
         <div>
-          <button
-            onClick={() => setShowCreateSession(true)}
-            className="w-full mb-3 py-3 text-sm font-bold text-ink border-2 border-dashed border-gray-300 rounded-2xl hover:border-ink hover:bg-white transition-colors"
-          >
-            + Schedule a game
+          <button onClick={() => setShowCreateSession(true)} className={`${btnSecondary} w-full mb-4`}>
+            <PlusIcon />
+            Schedule a game
           </button>
-          {showCreateSession && <NewSessionSheet groups={[group]} onClose={() => setShowCreateSession(false)} />}
-
-
           {sessions.length === 0 ? (
-            <EmptyState
-              icon="calendar"
-              title="No sessions yet"
-              description="Create a session to start tracking payments for this group."
-            />
+            <EmptyState icon="calendar" title="No games yet" description="Schedule one and everyone in the group gets a due for it." />
           ) : (
-            <div className="space-y-2">
-              {sessions.map((s) => {
-                const progress = s.targetAmount > 0
-                  ? Math.round((s.collectedAmount / s.targetAmount) * 100)
-                  : 0;
-                const sStyle = statusStyles[s.status] || 'bg-gray-100 text-gray-500';
-                return (
-                  <Link
-                    key={s.id}
-                    href={`/sessions/${s.id}`}
-                    className="block bg-white p-4 rounded-2xl border border-gray-100 shadow-card hover:border-gray-300 transition-colors"
-                  >
-                    <div className="flex justify-between items-center mb-2.5">
-                      <p className="text-sm font-bold text-ink">
-                        {s.kind === 'dues' && s.label
-                          ? `${s.label} dues`
-                          : new Date(s.date).toLocaleDateString('en-US', {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                      </p>
-                      <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${sStyle}`}>
-                        {s.status}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          progress >= 100 ? 'bg-volt-500' :
-                          progress >= 50 ? 'bg-pitch-500' :
-                          'bg-sun-400'
-                        }`}
-                        style={{ width: `${Math.min(progress, 100)}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-500 tabular-nums">
-                        {formatCurrency(s.collectedAmount)} / {formatCurrency(s.targetAmount)}
-                      </span>
-                      <span className="text-xs font-medium text-gray-500 tabular-nums">{progress}%</span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+            <GamesList sessions={sessions} targetPlayers={group.targetPlayers} />
           )}
         </div>
       )}
+      {showCreateSession && <NewSessionSheet groups={[group]} onClose={() => setShowCreateSession(false)} />}
     </div>
+  );
+}
+
+/** The ⋯ menu: change the group's details, or delete it (behind a confirm). */
+function GroupMenuSheet({
+  name,
+  onEdit,
+  onDelete,
+  onClose,
+}: {
+  name: string;
+  onEdit: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const row = 'press w-full flex items-center gap-3 min-h-12 px-2 py-1.5 rounded-xl text-left transition-colors';
+  return (
+    <Sheet titleId={titleId} onClose={onClose} align="left">
+      <SheetTitle id={titleId} title={name} onClose={onClose} />
+      <ul className="mt-3 -mx-2">
+        <li>
+          <button onClick={onEdit} className={`${row} hover:bg-chalk`}>
+            <span className="w-8 h-8 shrink-0 rounded-lg bg-chalk text-ink flex items-center justify-center">{icon(ICON_PATHS.pencil)}</span>
+            <span className="flex-1 text-[15px] font-semibold text-ink">Edit group details</span>
+          </button>
+        </li>
+        <li>
+            <button onClick={onDelete} className={`${row} hover:bg-kit-500/10`}>
+              <span className="w-8 h-8 shrink-0 rounded-lg bg-kit-500/10 text-kit-600 flex items-center justify-center">
+                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+              </span>
+              <span className="flex-1 text-[15px] font-semibold text-kit-600">Delete group</span>
+            </button>
+          </li>
+      </ul>
+    </Sheet>
   );
 }

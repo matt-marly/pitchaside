@@ -308,6 +308,7 @@ export function MoneyCard({
   onOpenAccount,
   onGameEnded,
   vote,
+  showGame = true,
 }: {
   group: IGroupWithMembers;
   money: ReturnType<typeof useGroupMoney>;
@@ -321,6 +322,8 @@ export function MoneyCard({
   onGameEnded?: (gameId: string) => void;
   /** The featured game's vote, if it has one. */
   vote?: SessionVoting | null;
+  /** False shows the account card alone (the group page lists every game in its own tab). */
+  showGame?: boolean;
 }) {
   const toast = useToast();
   const now = useNow();
@@ -661,6 +664,7 @@ export function MoneyCard({
       </div>
     </section>
 
+    {showGame && (
     <section aria-label="This week's game" className={`mt-3 ${cardCls}`}>
       <div className="absolute inset-0 turf-stripes-soft" />
       <div className="relative p-5">
@@ -707,6 +711,7 @@ export function MoneyCard({
         onCancel={() => setConfirmEnd(false)}
       />
     </section>
+    )}
     </>
   );
 }
