@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { EmptyState } from '@/components/empty-state';
 import Link from 'next/link';
 import { kitFor } from '@/components/illustrations';
 import { useToast } from '@/components/toast';
@@ -92,12 +93,11 @@ export function VoteResultsList({ results, compact = false }: { results: VoteRes
 export function LeagueTableView({ table }: { table: LeagueTable }) {
   if (table.rows.length === 0 || table.rows.every((r) => r.points === 0)) {
     return (
-      <div className="text-center py-10 px-6 bg-white rounded-3xl border border-dashed border-gray-300 chalk-dots">
-        <p className="font-display text-lg font-extrabold text-ink">The table is empty — for now</p>
-        <p className="text-sm text-gray-500 mt-1 max-w-xs mx-auto">
-          After each game, share the vote link from the session page. Every vote earns points here.
-        </p>
-      </div>
+      <EmptyState
+        icon="box"
+        title="No points yet"
+        description="After each game, players get a link to vote. Every vote earns points here."
+      />
     );
   }
   return (

@@ -62,7 +62,7 @@ export function MemberSheet({
     { k: 'Joined', v: new Date(joinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) },
     due && {
       k: due.label,
-      v: due.state === 'paid' ? 'Paid' : due.state === 'waived' ? 'Waived' : due.state === 'owes' ? `Owes ${formatCurrency(due.amount)}` : 'Not in',
+      v: due.state === 'paid' ? 'Paid' : due.state === 'waived' ? 'Waived' : due.state === 'owes' ? `${formatCurrency(due.amount)} to pay` : 'Not in',
       tone: due.state === 'owes' ? 'text-amber-700' : due.state === 'paid' ? 'text-pitch-600' : 'text-gray-600',
     },
     credit > 0 && { k: 'Credit', v: formatCurrency(credit), note: 'Pays their next due by itself once it covers a whole one' },

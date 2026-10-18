@@ -82,7 +82,7 @@ function SetPinForm({ onDone }: { onDone: () => void }) {
     <form onSubmit={handle} className="bg-white rounded-3xl border border-gray-100 shadow-card p-5 space-y-4">
       <div>
         <h3 className="text-base font-bold text-ink">Set transfer PIN</h3>
-        <p className="text-xs text-gray-500 mt-1">You need a 4-digit PIN to authorise payouts from group accounts.</p>
+        <p className="text-xs text-gray-500 mt-1">You&apos;ll type it every time you withdraw money from any of your groups.</p>
       </div>
       <input
         type="password"
@@ -154,7 +154,7 @@ export function PayoutsPanel({
     if (!cancelId) return;
     try {
       await cancelPayout(cancelId);
-      toast.success('Payout cancelled');
+      toast.success('Withdrawal cancelled');
       setCancelId(null);
       await load();
     } catch (err: any) {
@@ -175,9 +175,9 @@ export function PayoutsPanel({
     <div className="space-y-4">
       <ConfirmDialog
         open={!!cancelId}
-        title="Cancel payout"
-        message="This will cancel the pending transfer. Are you sure?"
-        confirmLabel="Cancel payout"
+        title="Cancel withdrawal"
+        message="This withdrawal hasn't been sent yet. Cancel it?"
+        confirmLabel="Cancel withdrawal"
         variant="danger"
         onConfirm={handleCancel}
         onCancel={() => setCancelId(null)}
@@ -191,8 +191,8 @@ export function PayoutsPanel({
             {formatCurrency(balance.available)}
           </p>
           <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-gray-500">
-            <span>Recorded in: <span className="font-bold text-ink">{formatCurrency(balance.totalIn)}</span></span>
-            <span>Out: <span className="font-bold text-ink">{formatCurrency(balance.totalOut)}</span></span>
+            <span>Received <span className="font-bold text-ink">{formatCurrency(balance.totalIn)}</span></span>
+            <span>Sent out <span className="font-bold text-ink">{formatCurrency(balance.totalOut)}</span></span>
           </div>
           {balance.manualIn > 0 && (
             <p className="mt-2 text-xs text-gray-500">
@@ -241,8 +241,8 @@ export function PayoutsPanel({
       {payouts.length === 0 ? (
         <EmptyState
           icon="receipt"
-          title="No payouts yet"
-          description="When you send money from this group's account, payouts show up here."
+          title="No withdrawals yet"
+          description="When you send money out of this group's account, it shows up here."
         />
       ) : (
         payouts.map((p) => (

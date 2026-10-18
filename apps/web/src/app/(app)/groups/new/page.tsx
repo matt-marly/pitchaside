@@ -152,7 +152,7 @@ export default function NewGroupPage() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="targetPlayers" className="block text-xs font-bold text-gray-700 mb-1.5">
-              Target Players *
+              Players per game *
             </label>
             <input
               id="targetPlayers"

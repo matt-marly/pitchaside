@@ -232,7 +232,7 @@ export default function GroupDetailPage() {
       toast.success('Group updated');
       refreshPayments().catch(() => {});
     } catch {
-      toast.error('Failed to update group');
+      toast.error('The changes didn’t save. Check your connection and try again.');
     } finally {
       setSaving(false);
     }
@@ -252,7 +252,7 @@ export default function GroupDetailPage() {
           toast.success('Group deleted');
           router.push('/groups');
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to delete group');
+          toast.error(err instanceof Error ? err.message : 'The group wasn’t deleted. Try again.');
         }
       },
     });
@@ -268,9 +268,9 @@ export default function GroupDetailPage() {
       refreshPayments().catch(() => {});
       setShowAddMember(false);
       setSelectedPlayerId('');
-      toast.success('Member added');
+      toast.success('Player added');
     } catch {
-      toast.error('Failed to add member');
+      toast.error('The player wasn’t added. Try again.');
     } finally {
       setAddingMember(false);
     }
@@ -309,7 +309,7 @@ export default function GroupDetailPage() {
           setGroup(updated);
           toast.success(`${playerName} removed`);
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to remove member');
+          toast.error(err instanceof Error ? err.message : 'They weren’t removed. Try again.');
         }
       },
     });
@@ -451,7 +451,7 @@ export default function GroupDetailPage() {
       {editing ? (
         <div className="mb-6 bg-white border border-gray-100 shadow-card rounded-3xl p-5 space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Group Name</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">Group name</label>
             <input
               value={editData.name}
               onChange={(e) => setEditData({ ...editData, name: e.target.value })}
@@ -468,7 +468,7 @@ export default function GroupDetailPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Pitch Location</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">Pitch location</label>
             <input
               value={editData.location}
               onChange={(e) => setEditData({ ...editData, location: e.target.value })}
@@ -498,7 +498,7 @@ export default function GroupDetailPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">Target Players</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">Players per game</label>
               <input
                 type="number"
                 min={1}
@@ -508,7 +508,7 @@ export default function GroupDetailPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">Fee per Player</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">Fee per player (₦)</label>
               <input
                 type="number"
                 min={0}
@@ -520,7 +520,7 @@ export default function GroupDetailPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Payment Type</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">How players pay</label>
             <select
               value={editData.paymentType}
               onChange={(e) => setEditData({ ...editData, paymentType: e.target.value })}
@@ -550,7 +550,7 @@ export default function GroupDetailPage() {
               disabled={saving || !editData.name.trim()}
               className="flex-1 py-2.5 text-sm font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-50 transition-colors"
             >
-              {saving ? 'Saving...' : 'Save Changes'}
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </div>
@@ -684,6 +684,12 @@ export default function GroupDetailPage() {
       </div>
 
       <div id="group-panel" role="tabpanel" aria-labelledby={`group-tab-${tab}`}>
+      {tab === 'table' && (
+        <div className="mb-2">
+          <h2 className="text-base font-bold text-ink">Table</h2>
+          <p className="text-xs text-gray-500">Points from players&apos; votes after each game</p>
+        </div>
+      )}
       {tab === 'table' &&
         (table ? (
           <LeagueTableView table={table} />
@@ -880,7 +886,7 @@ export default function GroupDetailPage() {
                     {(
                       [
                         { key: 'all', label: 'All', n: memberCount },
-                        { key: 'owes', label: 'Owe', n: owesCount },
+                        { key: 'owes', label: 'To pay', n: owesCount },
                         { key: 'paid', label: 'Paid', n: paidCount },
                         ...(outCount > 0 ? [{ key: 'out', label: 'Not in', n: outCount }] : []),
                       ] as { key: typeof memberFilter; label: string; n: number }[]
@@ -928,9 +934,7 @@ export default function GroupDetailPage() {
                           <span className="block text-[15px] font-bold text-ink leading-snug">{addingMe ? 'Adding you…' : 'Add yourself'}</span>
                           <span className="block text-xs text-gray-500 mt-0.5 truncate">If you play in this group too</span>
                         </span>
-                        <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                        </svg>
+                        <span className="shrink-0 text-sm font-bold text-pitch-700">Add me</span>
                       </button>
                     </li>
                   )}
@@ -995,7 +999,15 @@ export default function GroupDetailPage() {
             Schedule a game
           </button>
           {sessions.length === 0 ? (
-            <EmptyState icon="calendar" title="No games yet" description="Schedule one and everyone in the group gets a due for it." />
+            <EmptyState
+              icon="calendar"
+              title="No games yet"
+              description={
+                group.requireRsvp
+                  ? 'Schedule one and players can say they’re in. Each player who’s in gets a due for it.'
+                  : 'Schedule one and everyone in the group gets a due for it.'
+              }
+            />
           ) : (
             <>
               <GamesList sessions={sessions} targetPlayers={group.targetPlayers} kickoff={group.kickoffTime} />

@@ -23,7 +23,7 @@ export function RsvpToggle({
       <span>
         <span className="block text-sm font-bold text-ink">Players confirm each game</span>
         <span className="block text-xs text-gray-500 mt-0.5">
-          Players tap “I’m in” from their phone. The game caps at your target size with a waitlist, and only confirmed players are billed.
+          Players tap “I’m in” from their phone. When a game is full, the rest go on a waitlist. Only players who are in get a due.
         </span>
       </span>
     </label>

@@ -18,8 +18,8 @@ export function transferName(t: BankTransfer) {
 const STATUS: Record<BankTransfer['status'], { label: string; cls: string }> = {
   matched: { label: 'Matched', cls: 'bg-pitch-50 text-pitch-700' },
   assigned: { label: 'Matched', cls: 'bg-pitch-50 text-pitch-700' },
-  unmatched: { label: 'Needs matching', cls: 'bg-sun-400/20 text-ink' },
-  ignored: { label: 'Not for the group', cls: 'bg-gray-100 text-gray-600' },
+  unmatched: { label: 'To match', cls: 'bg-sun-400/20 text-ink' },
+  ignored: { label: 'Ignored', cls: 'bg-gray-100 text-gray-600' },
 };
 
 const when = (iso: string) =>
