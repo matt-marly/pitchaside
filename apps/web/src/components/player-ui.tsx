@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Ball, Player, kitFor, skins } from '@/components/illustrations';
 import { BallSpinner } from '@/components/skeleton';
 import { AttributeRow } from '@/components/ratings';
-import { TEAMS, teamName } from '@/components/lineup-card';
+import { BibWord, TEAMS, teamName } from '@/components/lineup-card';
 import { MatchDayBibs } from '@/components/match-day-bibs';
 import { useToast } from '@/components/toast';
 import { ShareCardButton } from '@/components/share-card';
@@ -280,6 +280,7 @@ export function MatchDayCard({ day }: { day: RecentMatchDay }) {
           <span className="flex items-center gap-1.5 text-[11px] font-extrabold text-ink bg-chalk border border-gray-200 rounded-full px-2.5 py-1">
             <span className={`w-2.5 h-2.5 rounded-sm ${TEAMS[day.myTeam].swatch}`} />
             {teamName(day.myTeam, day.captains)}
+            <BibWord team={day.myTeam} captains={day.captains} className="text-gray-500" />
           </span>
         )}
       </div>

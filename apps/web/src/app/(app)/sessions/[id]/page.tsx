@@ -14,8 +14,8 @@ import { PaymentStatus, SessionStatus } from '@pitchaside/shared';
 import { Trophy } from '@/components/illustrations';
 import { BallSpinner } from '@/components/skeleton';
 import { SessionVotingCard } from '@/components/ratings';
-import { LineupCard } from '@/components/lineup-card';
-import { TeamSheet } from '@/components/team-sheet';
+import { MatchDayBoard } from '@/components/match-day/board';
+import { ConfirmSheet } from '@/components/match-day/confirm-sheet';
 import { prettyTime } from '@/components/player-ui';
 
 type Tab = 'payments' | 'teams' | 'stars';
@@ -47,6 +47,10 @@ export default function SessionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // "End game" and "Cancel game" ask first: one sends every player a vote link, the other refunds to credit.
+  const [confirmStatus, setConfirmStatus] = useState<'completed' | 'cancelled' | null>(null);
+  // The match-day step switcher is pinned inside the sticky tab bar.
+  const [stepperSlot, setStepperSlot] = useState<HTMLDivElement | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMarking, setBulkMarking] = useState(false);
@@ -79,6 +83,16 @@ export default function SessionDetailPage() {
           : 'payments',
     );
   }, [session, tab]);
+
+  // Match day on a small phone: the tab bar steps aside so the board gets the whole screen.
+  const matchDayFocus = tab === 'teams' && session?.kind !== 'dues' && session?.status !== SessionStatus.CANCELLED;
+  useEffect(() => {
+    if (!matchDayFocus) return;
+    document.body.dataset.focus = 'matchday';
+    return () => {
+      delete document.body.dataset.focus;
+    };
+  }, [matchDayFocus]);
 
   function chooseTab(t: Tab) {
     setTab(t);
@@ -166,7 +180,7 @@ export default function SessionDetailPage() {
     try {
       await updateSessionStatus(id, status);
       await fetchSession();
-      toast.success(`Session marked as ${status}`);
+      toast.success(status === 'completed' ? 'Game ended. Vote links sent.' : status === 'cancelled' ? 'Game cancelled' : 'Game reopened');
     } catch {
       toast.error('Failed to update status');
     } finally {
@@ -235,6 +249,31 @@ export default function SessionDetailPage() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+      <ConfirmSheet
+        open={confirmStatus === 'completed'}
+        title="End this game?"
+        message="Every player gets the link to vote for Player of the Match. Anyone who still owes can carry on paying, and you can reopen the game later."
+        confirmLabel="End game"
+        cancelLabel="Not yet"
+        onConfirm={() => {
+          setConfirmStatus(null);
+          handleStatusChange('completed');
+        }}
+        onCancel={() => setConfirmStatus(null)}
+      />
+      <ConfirmSheet
+        open={confirmStatus === 'cancelled'}
+        title="Cancel this game?"
+        message="Players who paid by transfer get it back as credit for their next game. Payments you marked by hand stay as they are. You can reopen it later."
+        confirmLabel="Cancel game"
+        cancelLabel="Keep game"
+        danger
+        onConfirm={() => {
+          setConfirmStatus(null);
+          handleStatusChange('cancelled');
+        }}
+        onCancel={() => setConfirmStatus(null)}
       />
 
       {/* Hero card — scoreboard on turf */}
@@ -358,21 +397,21 @@ export default function SessionDetailPage() {
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1 items-center">
         {session.status !== SessionStatus.COMPLETED && (
           <button
-            onClick={() => handleStatusChange('completed')}
+            onClick={() => setConfirmStatus('completed')}
             disabled={updatingStatus}
-            className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-50 transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-4 min-h-11 text-xs font-bold text-volt-300 bg-ink rounded-xl hover:bg-pitch-900 disabled:opacity-50 transition-colors whitespace-nowrap"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
             </svg>
-            Complete
+            End game
           </button>
         )}
         {session.status !== SessionStatus.UPCOMING && (
           <button
             onClick={() => handleStatusChange('upcoming')}
             disabled={updatingStatus}
-            className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-ink bg-white border border-gray-200 rounded-xl hover:border-ink disabled:opacity-50 transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-4 min-h-11 text-xs font-bold text-ink bg-white border border-gray-200 rounded-xl hover:border-ink disabled:opacity-50 transition-colors whitespace-nowrap"
           >
             Reopen
           </button>
@@ -394,7 +433,7 @@ export default function SessionDetailPage() {
             }
           }}
           disabled={sendingReminders}
-          className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-ink bg-white border border-gray-200 rounded-xl hover:border-ink disabled:opacity-50 transition-colors whitespace-nowrap"
+          className="flex items-center gap-1.5 px-4 min-h-11 text-xs font-bold text-ink bg-white border border-gray-200 rounded-xl hover:border-ink disabled:opacity-50 transition-colors whitespace-nowrap"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
@@ -403,8 +442,9 @@ export default function SessionDetailPage() {
         </button>
         <button
           onClick={() => exportSessionPaymentsCsv(id).catch(() => toast.error('Export failed'))}
-          className="p-2.5 ml-auto text-gray-500 bg-white border border-gray-200 rounded-xl hover:text-ink transition-colors"
+          className="min-w-11 min-h-11 flex items-center justify-center ml-auto text-gray-500 bg-white border border-gray-200 rounded-xl hover:text-ink transition-colors"
           title="Export CSV"
+          aria-label="Export payments as CSV"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -412,10 +452,11 @@ export default function SessionDetailPage() {
         </button>
         {session.status !== SessionStatus.CANCELLED && (
           <button
-            onClick={() => handleStatusChange('cancelled')}
+            onClick={() => setConfirmStatus('cancelled')}
             disabled={updatingStatus}
-            className="p-2.5 text-gray-500 bg-white border border-gray-200 rounded-xl hover:text-kit-600 hover:border-kit-400 transition-colors"
-            title="Cancel session"
+            className="min-w-11 min-h-11 flex items-center justify-center text-gray-500 bg-white border border-gray-200 rounded-xl hover:text-kit-600 hover:border-kit-400 transition-colors"
+            title="Cancel game"
+            aria-label="Cancel game"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
@@ -424,8 +465,9 @@ export default function SessionDetailPage() {
         )}
         <button
           onClick={() => setShowDeleteConfirm(true)}
-          className="p-2.5 text-gray-500 bg-white border border-gray-200 rounded-xl hover:text-kit-600 hover:border-kit-400 transition-colors"
-          title="Delete session"
+          className="min-w-11 min-h-11 flex items-center justify-center text-gray-500 bg-white border border-gray-200 rounded-xl hover:text-kit-600 hover:border-kit-400 transition-colors"
+          title="Delete game"
+          aria-label="Delete game"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -439,7 +481,7 @@ export default function SessionDetailPage() {
           <div className="flex p-1 bg-white border border-gray-200 rounded-2xl" role="tablist">
             {([
               ['payments', coveredByDues ? 'Dues' : 'Payments', owingCount ? `${owingCount} to pay` : null],
-              ['teams', 'Teams', null],
+              ['teams', 'Match day', null],
               ['stars', 'Stars', null],
             ] as [Tab, string, string | null][]).map(([t, name, note]) => (
               <button
@@ -447,7 +489,7 @@ export default function SessionDetailPage() {
                 role="tab"
                 aria-selected={tab === t}
                 onClick={() => chooseTab(t)}
-                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${
+                className={`flex-1 min-h-11 py-2 rounded-xl text-sm font-bold transition-colors ${
                   tab === t ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
                 }`}
               >
@@ -456,18 +498,20 @@ export default function SessionDetailPage() {
               </button>
             ))}
           </div>
+          {tab === 'teams' && session.status !== SessionStatus.CANCELLED && <div ref={setStepperSlot} />}
         </div>
       )}
 
-      {isGame && tab === 'teams' && (
-        <>
-          {session.status === SessionStatus.UPCOMING && <TeamSheet sessionId={id} onChange={fetchSession} />}
-          {session.status !== SessionStatus.CANCELLED && (
-            <div id="lineup" className="scroll-mt-20">
-              <LineupCard sessionId={id} matchDay={String(session.date).slice(0, 10) <= localToday()} />
-            </div>
-          )}
-        </>
+      {isGame && tab === 'teams' && session.status !== SessionStatus.CANCELLED && (
+        <div id="lineup" className="scroll-mt-20">
+          <MatchDayBoard
+            sessionId={id}
+            matchDay={String(session.date).slice(0, 10) <= localToday()}
+            showSquad={session.status === SessionStatus.UPCOMING}
+            stepperSlot={stepperSlot}
+            onSquadChange={fetchSession}
+          />
+        </div>
       )}
 
       {isGame && tab === 'stars' && session.status !== SessionStatus.CANCELLED && (
