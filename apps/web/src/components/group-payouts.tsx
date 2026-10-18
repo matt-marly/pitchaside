@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/toast';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { btnPrimary } from '@/components/buttons';
 import { EmptyState } from '@/components/empty-state';
 import { PayeeCard } from '@/components/group-payee';
 import { SendMoneyModal, type RefundableMember } from '@/components/send-money-modal';
@@ -186,23 +187,19 @@ export function PayoutsPanel({
       {/* Balance card */}
       {balance && (
         <div className="bg-white rounded-3xl border border-gray-100 shadow-card p-5">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-gray-500">Available balance</p>
-          <p className="font-display text-3xl font-extrabold text-ink tabular-nums mt-1">
+          <p className="text-xs font-semibold text-gray-500">Available to withdraw</p>
+          <p className="font-display text-[34px] leading-none font-extrabold text-ink tabular-nums mt-1.5">
             {formatCurrency(balance.available)}
           </p>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-gray-500">
-            <span>Received <span className="font-bold text-ink">{formatCurrency(balance.totalIn)}</span></span>
-            <span>Sent out <span className="font-bold text-ink">{formatCurrency(balance.totalOut)}</span></span>
-          </div>
+          <p className="mt-2 text-xs text-gray-500 tabular-nums">
+            {formatCurrency(balance.totalIn)} received, {formatCurrency(balance.totalOut)} sent out
+          </p>
           {balance.manualIn > 0 && (
             <p className="mt-2 text-xs text-gray-500">
               {formatCurrency(balance.manualIn)} of that was recorded by hand, so it isn’t included in what you can send.
             </p>
           )}
-          <button
-            onClick={() => setShowForm(true)}
-            className="mt-4 w-full py-3 bg-ink text-volt-300 font-bold rounded-xl hover:bg-pitch-900 transition-colors"
-          >
+          <button onClick={() => setShowForm(true)} className={`${btnPrimary} mt-4 w-full`}>
             Send money
           </button>
         </div>
@@ -237,7 +234,8 @@ export function PayoutsPanel({
         />
       )}
 
-      {/* Payout history */}
+      {/* Withdrawal history, headed like the page's other sections */}
+      <h2 className="pt-3 text-base font-bold text-ink">Past withdrawals</h2>
       {payouts.length === 0 ? (
         <EmptyState
           icon="receipt"

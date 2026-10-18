@@ -263,10 +263,20 @@ export function PayeeCard({
     ) : (
       <button
         onClick={() => setEditing(true)}
-        className="w-full text-left bg-white rounded-3xl border-2 border-dashed border-gray-300 p-5 hover:border-ink transition-colors"
+        className="w-full flex items-center gap-3 px-4 min-h-16 py-3 text-left bg-white rounded-3xl border border-gray-100 shadow-card hover:bg-chalk transition-colors"
       >
-        <p className="text-sm font-bold text-ink">+ Save your pitch owner</p>
-        <p className="text-xs text-gray-500 mt-0.5">Add the pitch owner or facility manager once, then pay them in one tap.</p>
+        <span className="w-10 h-10 rounded-xl bg-volt-300 text-ink flex items-center justify-center shrink-0" aria-hidden>
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+          </svg>
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px] font-bold text-ink leading-snug">Save your pitch owner</span>
+          <span className="block text-xs text-gray-500 mt-0.5">Add the pitch owner or facility manager once, then pay them in one tap.</span>
+        </span>
+        <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+        </svg>
       </button>
     );
   }

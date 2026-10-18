@@ -8,7 +8,6 @@ import { btnPrimary } from '@/components/buttons';
 import { RsvpToggle } from '@/components/rsvp-toggle';
 import { ContributionsVisibilityPicker } from '@/components/contributions-visibility';
 import { prettyTime } from '@/components/player-ui';
-import { formatCurrency } from '@/lib/api';
 import { frequencyOptions } from '@/lib/billing';
 
 export interface GroupEditData {
@@ -25,7 +24,6 @@ export interface GroupEditData {
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const FEES = [1000, 1500, 2000, 2500, 3000];
 // Kick-off times on the half hour, early morning to late evening.
 const TIMES = Array.from({ length: 37 }, (_, i) => {
   const mins = 5 * 60 + i * 30;
@@ -39,6 +37,82 @@ const chip = (on: boolean) =>
   `h-10 px-3 rounded-full border text-[13px] font-bold whitespace-nowrap transition-colors ${
     on ? 'bg-ink border-ink text-volt-300' : 'bg-white border-gray-200 text-gray-700 hover:border-ink'
   }`;
+
+/** A native select with the field's padding and a chevron set in from the edge like the app's other icons. */
+function Select({ id, value, onChange, children }: { id: string; value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={`${field} appearance-none pr-11 cursor-pointer`}>
+        {children}
+      </select>
+      <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * A number you nudge or type: − and + sit inside the one field, so it reads as a single control.
+ * `prefix` shows a unit (₦) before the number; `format` shows it grouped while not being edited.
+ */
+function Stepper({
+  id,
+  value,
+  onChange,
+  step,
+  min,
+  prefix,
+  labelledBy,
+  less,
+  more,
+}: {
+  id: string;
+  value: number;
+  onChange: (v: number) => void;
+  step: number;
+  min: number;
+  prefix?: string;
+  labelledBy: string;
+  less: string;
+  more: string;
+}) {
+  const btn =
+    'w-12 shrink-0 flex items-center justify-center text-ink hover:bg-chalk disabled:text-gray-300 disabled:hover:bg-transparent transition-colors';
+  return (
+    <div className="flex h-12 rounded-xl border border-gray-200 bg-white overflow-hidden focus-within:ring-4 focus-within:ring-volt-300/70 focus-within:border-pitch-600">
+      <button type="button" aria-label={less} disabled={value - step < min} onClick={() => onChange(Math.max(min, value - step))} className={`${btn} border-r border-gray-200`}>
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.75} stroke="currentColor" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
+        </svg>
+      </button>
+      <div className="flex-1 min-w-0 flex items-center justify-center gap-0.5">
+        {prefix && (
+          <span className="font-display text-lg font-extrabold text-gray-400" aria-hidden>
+            {prefix}
+          </span>
+        )}
+        <input
+          id={id}
+          type="number"
+          inputMode="numeric"
+          min={min}
+          step={step}
+          aria-labelledby={labelledBy}
+          value={Number.isFinite(value) ? value : ''}
+          onChange={(e) => onChange(Math.max(0, Math.round(Number(e.target.value))))}
+          style={{ width: `${Math.max(2, String(Number.isFinite(value) ? value : '').length) + 1}ch` }}
+          className="min-w-0 bg-transparent text-center font-display text-lg font-extrabold text-ink tabular-nums focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+      </div>
+      <button type="button" aria-label={more} onClick={() => onChange(value + step)} className={`${btn} border-l border-gray-200`}>
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.75} stroke="currentColor" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m7-7H5" />
+        </svg>
+      </button>
+    </div>
+  );
+}
 
 /** "Every Saturday" → "Saturday"; anything else is a custom schedule. */
 function dayOf(schedule: string) {
@@ -104,11 +178,11 @@ export function GroupEditSheet({
           </label>
           <textarea
             id="g-desc"
-            rows={3}
+            rows={2}
             value={d.description}
             onChange={(e) => set({ description: e.target.value })}
-            placeholder="e.g. Friendly 5-a-side, all levels welcome. Bring a white and a dark top."
-            className={`${field} py-3 resize-none`}
+            placeholder="e.g. Friendly 5-a-side, all levels welcome"
+            className={`${field} py-3 leading-snug resize-none`}
           />
         </div>
         <div>
@@ -151,14 +225,14 @@ export function GroupEditSheet({
           <label htmlFor="g-time" className={label}>
             Kick-off
           </label>
-          <select id="g-time" value={d.kickoffTime.slice(0, 5)} onChange={(e) => set({ kickoffTime: e.target.value })} className={field}>
+          <Select id="g-time" value={d.kickoffTime.slice(0, 5)} onChange={(v) => set({ kickoffTime: v })}>
             <option value="">Not set</option>
             {times.map((t) => (
               <option key={t} value={t}>
                 {prettyTime(t)}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {/* Players and money */}
@@ -166,61 +240,34 @@ export function GroupEditSheet({
           <span className={label} id="g-players-label">
             Players per game
           </span>
-          <div className="flex items-center gap-3" role="group" aria-labelledby="g-players-label">
-            <button
-              type="button"
-              onClick={() => set({ targetPlayers: Math.max(2, d.targetPlayers - 1) })}
-              aria-label="One fewer player"
-              className="w-12 h-12 shrink-0 rounded-xl border border-gray-200 bg-white text-xl font-bold text-ink hover:border-ink"
-            >
-              −
-            </button>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={2}
-              aria-labelledby="g-players-label"
-              value={d.targetPlayers}
-              onChange={(e) => set({ targetPlayers: Math.max(0, Math.round(Number(e.target.value))) })}
-              className={`${field} text-center font-display text-lg font-extrabold tabular-nums`}
-            />
-            <button
-              type="button"
-              onClick={() => set({ targetPlayers: d.targetPlayers + 1 })}
-              aria-label="One more player"
-              className="w-12 h-12 shrink-0 rounded-xl border border-gray-200 bg-white text-xl font-bold text-ink hover:border-ink"
-            >
-              +
-            </button>
-          </div>
+          <Stepper
+            id="g-players"
+            labelledBy="g-players-label"
+            value={d.targetPlayers}
+            onChange={(v) => set({ targetPlayers: v })}
+            step={1}
+            min={2}
+            less="One fewer player"
+            more="One more player"
+          />
           <p className="mt-1.5 text-xs text-gray-500">The squad can be bigger; this is how many play each game.</p>
         </div>
         <div>
-          <label htmlFor="g-fee" className={label}>
+          <span id="g-fee-label" className={label}>
             Fee per player
-          </label>
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] font-bold text-gray-500" aria-hidden>
-              ₦
-            </span>
-            <input
-              id="g-fee"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              value={d.feePerPlayer || ''}
-              onChange={(e) => set({ feePerPlayer: Math.max(0, Math.round(Number(e.target.value))) })}
-              placeholder="1500"
-              className={`${field} pl-8 tabular-nums`}
-            />
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {FEES.map((f) => (
-              <button key={f} type="button" aria-pressed={d.feePerPlayer === f} onClick={() => set({ feePerPlayer: f })} className={chip(d.feePerPlayer === f)}>
-                {formatCurrency(f)}
-              </button>
-            ))}
-          </div>
+          </span>
+          <Stepper
+            id="g-fee"
+            labelledBy="g-fee-label"
+            value={d.feePerPlayer}
+            onChange={(v) => set({ feePerPlayer: v })}
+            step={500}
+            min={0}
+            prefix="₦"
+            less="₦500 less"
+            more="₦500 more"
+          />
+          <p className="mt-1.5 text-xs text-gray-500">Steps of ₦500, or type any amount.</p>
         </div>
         <fieldset>
           <legend className={label}>How players pay</legend>
