@@ -3,10 +3,24 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useToast } from '@/components/toast';
 import { Avatar } from '@/components/ratings';
+import { BallSpinner } from '@/components/skeleton';
 import { getRsvpBoard, setRsvpForPlayer, type RsvpBoard, type SquadMember } from '@/lib/api';
 
-/** Organiser's view of who's in for a game — tap to move players in or out. */
-export function TeamSheet({ sessionId, onChange }: { sessionId: string; onChange?: () => void }) {
+/**
+ * Organiser's view of who's in for a game — tap to move players in or out. `bare` drops the card
+ * chrome so it can sit inside a bottom sheet; `titleId` labels that sheet.
+ */
+export function TeamSheet({
+  sessionId,
+  onChange,
+  bare = false,
+  titleId,
+}: {
+  sessionId: string;
+  onChange?: () => void;
+  bare?: boolean;
+  titleId?: string;
+}) {
   const toast = useToast();
   const [board, setBoard] = useState<RsvpBoard | null>(null);
   const [working, setWorking] = useState<string | null>(null);
@@ -16,7 +30,7 @@ export function TeamSheet({ sessionId, onChange }: { sessionId: string; onChange
     load();
   }, [load]);
 
-  if (!board) return null;
+  if (!board) return bare ? <div className="py-12 flex justify-center"><BallSpinner className="w-6 h-6" /></div> : null;
 
   async function move(p: SquadMember, status: 'in' | 'out') {
     setWorking(p.id);
@@ -45,7 +59,7 @@ export function TeamSheet({ sessionId, onChange }: { sessionId: string; onChange
     <button
       onClick={onClick}
       disabled={!!working}
-      className={`px-3 py-1.5 text-xs font-bold rounded-lg disabled:opacity-40 transition-colors ${
+      className={`px-3 ${bare ? 'min-h-11' : 'py-1.5'} text-xs font-bold rounded-lg disabled:opacity-40 transition-colors ${
         dark ? 'bg-ink text-volt-300 hover:bg-pitch-900' : 'bg-white border border-gray-200 text-gray-600 hover:border-ink'
       }`}
     >
@@ -54,11 +68,11 @@ export function TeamSheet({ sessionId, onChange }: { sessionId: string; onChange
   );
 
   return (
-    <section className="mb-6 bg-white rounded-3xl border border-gray-100 shadow-card p-5">
+    <section className={bare ? '' : 'mb-6 bg-white rounded-3xl border border-gray-100 shadow-card p-5'}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-pitch-600">Team sheet</p>
-          <h2 className="text-lg font-extrabold text-ink leading-tight">Who&apos;s playing</h2>
+          <h2 id={titleId} className="text-lg font-extrabold text-ink leading-tight">Who&apos;s playing</h2>
           <p className="text-xs text-gray-500 mt-0.5">
             {board.requireRsvp
               ? "Players say if they're in; tap to move anyone."
