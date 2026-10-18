@@ -309,6 +309,7 @@ export function MoneyCard({
   onGameEnded,
   vote,
   showGame = true,
+  showTicker = true,
 }: {
   group: IGroupWithMembers;
   money: ReturnType<typeof useGroupMoney>;
@@ -324,6 +325,8 @@ export function MoneyCard({
   vote?: SessionVoting | null;
   /** False shows the account card alone (the group page lists every game in its own tab). */
   showGame?: boolean;
+  /** False drops the latest-payments preview (the group's Money tab lists every transfer right below). */
+  showTicker?: boolean;
 }) {
   const toast = useToast();
   const now = useNow();
@@ -586,7 +589,7 @@ export function MoneyCard({
         )}
 
         {/* The ticker: what's come in lately, newest on top */}
-        {ticker.length > 0 && (
+        {showTicker && ticker.length > 0 && (
           <div className="mt-4 flex items-center justify-between">
             <p className="text-xs font-bold text-white/70">Money in</p>
             <button
@@ -598,7 +601,7 @@ export function MoneyCard({
             </button>
           </div>
         )}
-        {ticker.length > 0 && (
+        {showTicker && ticker.length > 0 && (
           <ul className="mt-1 rounded-2xl bg-white/[0.06] divide-y divide-white/[0.07] overflow-hidden" aria-label="Latest transfers">
             {ticker.map((t, i) => {
               const landed = fresh.has(t.id);
@@ -650,7 +653,7 @@ export function MoneyCard({
             })}
           </ul>
         )}
-        {transfers && transfers.length === 0 && hasAccount && (
+        {showTicker && transfers && transfers.length === 0 && hasAccount && (
           <p className="mt-4 rounded-2xl bg-white/[0.06] px-3.5 py-3 text-[13px] text-white/60">
             No transfers yet. Share the account details and they&apos;ll show up here as they land.
           </p>

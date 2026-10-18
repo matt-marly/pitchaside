@@ -305,6 +305,8 @@ export default function GroupDetailPage() {
   // What each member's row says about money: the next game (or this period's dues, for groups
   // that collect monthly/weekly), so "who still owes" reads straight off the list.
   const perGame = group.paymentType === PaymentType.PER_SESSION;
+  // Still building the squad (fewer members than places in a game): inviting is the main job here.
+  const recruiting = memberCount < group.targetPlayers;
   const nextGame = sessions
     .filter((s) => s.kind !== 'dues' && s.status === 'upcoming' && daysFromToday(s.date) >= 0)
     .sort((a, b) => gameDay(a.date).getTime() - gameDay(b.date).getTime())[0];
@@ -577,7 +579,9 @@ export default function GroupDetailPage() {
             {billing?.account && (
               <button
                 onClick={() => setShowInvite(true)}
-                className="press mt-3 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl bg-volt-400 text-ink text-[15px] font-extrabold hover:bg-volt-300 transition-colors"
+                className={`press mt-3 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl text-[15px] transition-colors ${
+                  recruiting ? 'bg-volt-400 text-ink font-extrabold hover:bg-volt-300' : 'bg-white/10 text-white font-bold hover:bg-white/15'
+                }`}
               >
                 <InviteIcon />
                 Invite players
@@ -669,6 +673,7 @@ export default function GroupDetailPage() {
                   gameFallback={null}
                   canManage={canManage}
                   showGame={false}
+                  showTicker={false}
                   onScheduleGame={() => setShowCreateSession(true)}
                   onOpenAccount={() => setShowAccount(true)}
                 />
@@ -784,7 +789,7 @@ export default function GroupDetailPage() {
               {/* Who's paid for the next game: the same filter style as the Sessions page */}
               {nextDue && (
                 <div className="mt-3">
-                  <div role="radiogroup" aria-label={`Show the squad by payment for ${dueLabel}`} className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
+                  <div role="radiogroup" aria-label={`Show the squad by payment for ${dueLabel}`} className="-mx-4 px-4 flex gap-2 overflow-x-auto [scrollbar-width:none]">
                     {(
                       [
                         { key: 'all', label: 'All', n: memberCount },
@@ -798,8 +803,8 @@ export default function GroupDetailPage() {
                         role="radio"
                         aria-checked={memberFilter === f.key}
                         onClick={() => setMemberFilter(f.key)}
-                        className={`shrink-0 min-h-9 px-3 text-xs font-bold rounded-xl whitespace-nowrap tabular-nums transition-colors ${
-                          memberFilter === f.key ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink hover:bg-chalk'
+                        className={`shrink-0 h-10 px-3.5 text-[13px] font-bold rounded-full border whitespace-nowrap tabular-nums transition-colors ${
+                          memberFilter === f.key ? 'bg-ink border-ink text-volt-300' : 'bg-white border-gray-200 text-gray-700 hover:border-ink'
                         }`}
                       >
                         {f.label} {f.n}

@@ -34,11 +34,11 @@ function GameRow({ s, targetPlayers, kickoff }: { s: ISessionWithDetails; target
   const { payments, paid, owing } = gameMoney(s);
   const collected = Number(s.collectedAmount);
   const owed = owing.reduce((sum, p) => sum + Number(p.amount), 0);
-  // Before a game the bar runs to the full-squad target; once it's played, to what the players who were in owed.
+  // Money is measured against what the players who are in owe, never the full-squad target: empty
+  // places aren't owed by anyone. Places are said separately ("12 of 28 in").
+  const due = collected + owed;
+  const pct = due > 0 ? Math.min(100, Math.round((collected / due) * 100)) : 0;
   const played = s.status === 'completed' || daysFromToday(s.date) < 0;
-  const scale = s.kind === 'dues' || played ? collected + owed : Number(s.targetAmount);
-  const pct = scale > 0 ? Math.min(100, Math.round((collected / scale) * 100)) : 0;
-  const owedPct = scale > 0 ? Math.min(100 - pct, (owed / scale) * 100) : 0;
   const time = s.kind === 'dues' ? null : prettyTime(s.kickoffTime || kickoff);
   const title =
     s.kind === 'dues' && s.label
@@ -47,12 +47,15 @@ function GameRow({ s, targetPlayers, kickoff }: { s: ISessionWithDetails; target
   const line =
     s.kind === 'dues'
       ? `${paid.length} of ${payments.length} paid`
-      : played
-        ? payments.length
-          ? `${payments.length} played · ${owing.length ? `${owing.length} still owe` : 'all paid'}`
-          : 'Nobody was in'
-        : `${payments.length} of ${targetPlayers} in`;
-  const money = `${formatCurrency(collected)} paid of ${formatCurrency(played || s.kind === 'dues' ? collected + owed : Number(s.targetAmount))}`;
+      : !payments.length
+        ? played
+          ? 'Nobody was in'
+          : 'Nobody in yet'
+        : played
+          ? `${payments.length} played${owing.length ? `, ${owing.length} still owe` : ', all paid'}`
+          : `${payments.length} of ${targetPlayers} in`;
+  // Paid through a monthly (weekly…) due: there's nothing to collect on the game itself.
+  const money = due > 0 ? `${formatCurrency(collected)} of ${formatCurrency(due)} paid` : payments.length ? 'Covered by dues' : null;
 
   return (
     <li>
@@ -72,14 +75,23 @@ function GameRow({ s, targetPlayers, kickoff }: { s: ISessionWithDetails; target
             {chip.text}
           </span>
         </div>
-        <div className="mt-2.5 h-2 rounded-full bg-gray-100 overflow-hidden flex" aria-hidden>
-          <div className="h-full bg-volt-500" style={{ width: `${pct}%` }} />
-          <div className="h-full bg-sun-400" style={{ width: `${owedPct}%` }} />
-        </div>
-        <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-gray-600 tabular-nums">
+        <div className="mt-1 flex items-center justify-between gap-2 text-[13px] text-gray-600 tabular-nums">
           <span className="truncate">{line}</span>
-          <span className="shrink-0 font-semibold">{money}</span>
+          {money && <span className="shrink-0 font-semibold text-ink">{money}</span>}
         </div>
+        {/* How much of what's owed has come in (text above says the same, so colour isn't the only cue) */}
+        {due > 0 && (
+          <div
+            className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden"
+            role="progressbar"
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`${pct}% of what's owed has been paid`}
+          >
+            <div className="h-full rounded-full bg-pitch-600" style={{ width: `${pct}%` }} />
+          </div>
+        )}
       </Link>
     </li>
   );

@@ -804,22 +804,22 @@ export function TransfersPanel({
             aria-expanded={showRecord}
             className="h-11 -my-2 px-1 text-sm font-bold text-pitch-700 whitespace-nowrap"
           >
-            {showRecord ? 'Close' : 'Record a missed one'}
+            {showRecord ? 'Close' : 'Add a missing transfer'}
           </button>
         </div>
         <p className="text-xs text-gray-500 tabular-nums">
           {formatCurrency(received)} from {counted.length} transfer{counted.length === 1 ? '' : 's'}
         </p>
         {transfers.length > 0 && (
-          <div role="radiogroup" aria-label="Show transfers" className="mt-2 flex gap-1">
+          <div role="radiogroup" aria-label="Show transfers" className="mt-3 flex gap-2">
             {(['all', 'unmatched'] as const).map((f) => (
               <button
                 key={f}
                 role="radio"
                 aria-checked={activeFilter === f}
                 onClick={() => setFilter(f)}
-                className={`min-h-9 px-3 text-xs font-bold rounded-xl whitespace-nowrap tabular-nums transition-colors ${
-                  activeFilter === f ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink hover:bg-chalk'
+                className={`h-10 px-3.5 text-[13px] font-bold rounded-full border whitespace-nowrap tabular-nums transition-colors ${
+                  activeFilter === f ? 'bg-ink border-ink text-volt-300' : 'bg-white border-gray-200 text-gray-700 hover:border-ink'
                 }`}
               >
                 {f === 'all' ? 'All' : 'To match'} {f === 'all' ? counted.length : unmatchedCount}
@@ -832,7 +832,7 @@ export function TransfersPanel({
       {showRecord && (
         <form onSubmit={handleRecord} className="bg-white rounded-3xl border border-gray-100 shadow-card p-4 space-y-3">
           <p className="text-xs text-gray-500">
-            Manually log money that arrived but wasn&apos;t picked up by the webhook.
+            For a transfer that reached the group account but isn&apos;t listed here. Check it isn&apos;t already in the list, so it isn&apos;t counted twice.
           </p>
           <div className="grid grid-cols-[110px_1fr] gap-2">
             <input
