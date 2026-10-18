@@ -112,6 +112,7 @@ export function GroupAccountCard({
   balance,
   onChange,
   onMatchTransfer,
+  showLink = true,
 }: {
   groupId: string;
   groupName: string;
@@ -122,6 +123,8 @@ export function GroupAccountCard({
   onChange: (b: GroupBilling) => void;
   /** Opens an unmatched transfer for matching; without it, goes to the group's Transfers tab. */
   onMatchTransfer?: (transferId: string) => void;
+  /** False hides the group link box (a page with its own Invite button doesn't need it twice). */
+  showLink?: boolean;
 }) {
   const toast = useToast();
   const { user, refreshUser } = useAuth();
@@ -346,6 +349,7 @@ export function GroupAccountCard({
       </div>
 
       {/* Invite / pay link */}
+      {showLink && (
       <div className="bg-white rounded-3xl border border-gray-100 shadow-card p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -390,6 +394,7 @@ export function GroupAccountCard({
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -663,15 +668,22 @@ export function TransfersPanel({
   }, [mockMode]);
 
   const focused = transfers.find((t) => t.id === focusId);
+  // Open a linked transfer once. The list refreshes every 20s, so key on the id, not the object.
+  const handledFocus = useRef<string | null>(null);
   useEffect(() => {
-    if (!focused) return;
+    if (!focused || handledFocus.current === focused.id) return;
+    // Wait for the games too, so the picker has everyone who owes.
+    if (focused.status === 'unmatched' && sessions.length === 0) return;
+    handledFocus.current = focused.id;
     if (focused.status !== 'unmatched') setFilter('all');
     setOpenId(focused.id);
+    // Arrived from the home's "Match to a player": open the picker straight away.
+    if (focused.status === 'unmatched' && pendingOptionsRef.current > 0) setMatching(focused);
     // After the list has rendered with the row in it.
     requestAnimationFrame(() =>
       document.getElementById(`transfer-${focused.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     );
-  }, [focused]);
+  }, [focused, sessions.length]);
 
   const pendingOptions: PendingOption[] = sessions
     .filter((s) => s.status !== 'cancelled')
@@ -689,6 +701,8 @@ export function TransfersPanel({
         })),
     );
   const [matching, setMatching] = useState<BankTransfer | null>(null);
+  const pendingOptionsRef = useRef(0);
+  pendingOptionsRef.current = pendingOptions.length;
   const [ignoring, setIgnoring] = useState<BankTransfer | null>(null);
 
   async function run(id: string, fn: () => Promise<unknown>, ok: string) {
@@ -1110,7 +1124,7 @@ function MatchPlayerSheet({
   const choice = options.find((o) => o.id === picked) ?? null;
   const outcome = choice ? matchOutcome(transfer, choice, options, credits[choice.playerId] ?? 0) : null;
   const first = choice?.name.split(' ')[0];
-  const from = transfer.senderName || 'an unknown sender';
+  const from = transfer.senderName ? transferName(transfer) : 'an unknown sender';
 
   const list = (title: string, rows: typeof ranked, showWhat = true) =>
     rows.length > 0 && (

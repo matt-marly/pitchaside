@@ -332,7 +332,7 @@ export default function Dashboard() {
       .slice(0, 6)
       .map((t) => ({
         key: `t-${t.id}`,
-        href: `/groups/${group?.id}?tab=transfers`,
+        href: `/groups/${group?.id}?tab=transfers&transfer=${t.id}`,
         title: `${formatCurrency(t.amount)} from ${transferName(t)}`,
         detail: new Date(t.receivedAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' }),
         icon: <span className="font-display text-base font-extrabold">₦</span>,
@@ -392,7 +392,7 @@ export default function Dashboard() {
     {
       title: 'Group',
       actions: [
-        gid ? { key: 'group', label: 'Group settings', icon: icon(ICON_PATHS.cog), href: `/groups/${gid}` } : null,
+        gid ? { key: 'group', label: 'Group settings', icon: icon(ICON_PATHS.cog), href: `/groups/${gid}?edit=1` } : null,
         canManage ? { key: 'new-group', label: 'Create a group', icon: icon(ICON_PATHS.plus), href: '/groups/new' } : null,
       ].filter(Boolean) as MoreAction[],
     },

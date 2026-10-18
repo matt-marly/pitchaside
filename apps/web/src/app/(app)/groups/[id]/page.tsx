@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { BackButton } from '@/components/back-button';
 import { KeepHyphens } from '@/components/brand';
 import { EmptyState } from '@/components/empty-state';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -71,6 +70,8 @@ export default function GroupDetailPage() {
   const [tab, setTab] = useState<Tab>(() => tabFromUrl(searchParams.get('tab')).tab);
   const [moneyView, setMoneyView] = useState<'transfers' | 'payouts'>(() => tabFromUrl(searchParams.get('tab')).money);
   const [table, setTable] = useState<LeagueTable | null>(null);
+  const [tableFailed, setTableFailed] = useState(false);
+  const [wantEdit, setWantEdit] = useState(false);
   // Balance, account and transfers, kept fresh the same way as on the home.
   const money = useGroupMoney(id, null);
   const billing = money.billing;
@@ -134,10 +135,30 @@ export default function GroupDetailPage() {
         setGameTotal(s.meta.total);
         setAllPlayers(p);
       })
-      .catch(() => router.push('/groups'))
+      .catch(() => {
+        toast.error('That group couldn’t be opened. It may have been deleted, or you’re offline.');
+        router.replace('/groups');
+      })
       .finally(() => setLoading(false));
-    getGroupTable(id).then(setTable).catch(() => {});
+    loadTable();
+    // Opened from the home's "Group settings": go straight to editing.
+    if (searchParams.get('edit') === '1') setWantEdit(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, router]);
+
+  function loadTable() {
+    setTableFailed(false);
+    getGroupTable(id).then(setTable).catch(() => setTableFailed(true));
+  }
+
+  // ?edit=1 waits for the group to load, then opens the edit form once.
+  useEffect(() => {
+    if (wantEdit && group) {
+      setWantEdit(false);
+      startEdit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantEdit, group]);
 
   async function refreshPayments() {
     const [s] = await Promise.all([getSessionsPaginated(1, gameLimit, id), money.reload()]);
@@ -161,8 +182,12 @@ export default function GroupDetailPage() {
   }
 
   /** Switch section; if the tabs have been scrolled under the top, bring the new section's start into view. */
-  function openTab(t: Tab) {
+  function openTab(t: Tab, view?: 'transfers' | 'payouts') {
     setTab(t);
+    if (view) setMoneyView(view);
+    // The tab lives in the URL, so a refresh, a shared link or coming Back from a game lands here again.
+    const urlTab = t === 'money' ? ((view ?? moneyView) === 'payouts' ? 'payouts' : 'money') : t;
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${urlTab === 'members' ? '' : `?tab=${urlTab}`}`);
     const bar = document.getElementById('group-tabs');
     if (bar && bar.getBoundingClientRect().top <= 1) {
       requestAnimationFrame(() => document.getElementById('group-tab-top')?.scrollIntoView({ block: 'start' }));
@@ -293,12 +318,12 @@ export default function GroupDetailPage() {
   if (loading || !group) {
     return (
       <div className="p-4 sm:p-6 max-w-2xl mx-auto">
-        <div className="animate-pulse space-y-4">
-          <div className="h-5 bg-gray-200 rounded w-20" />
-          <div className="h-20 bg-gray-100 rounded-2xl" />
-          <div className="h-48 bg-gray-100 rounded-[28px]" />
-          <div className="h-12 bg-gray-100 rounded-xl" />
-          <div className="h-16 bg-gray-100 rounded-xl" />
+        <div className="animate-pulse" aria-busy="true" aria-label="Loading the group">
+          <div className="h-8 w-28 bg-gray-100 rounded-full mb-4" />
+          <div className="h-[244px] bg-ink/90 rounded-[28px]" />
+          <div className="mt-3 h-[52px] bg-gray-100 rounded-2xl" />
+          <div className="mt-6 h-5 w-24 bg-gray-100 rounded" />
+          <div className="mt-3 h-64 bg-gray-100 rounded-3xl" />
         </div>
       </div>
     );
@@ -368,7 +393,15 @@ export default function GroupDetailPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
-      <BackButton label="Groups" />
+      <Link
+        href="/groups"
+        className="inline-flex items-center gap-1.5 pl-2 pr-3 py-1.5 -ml-1 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-full hover:text-ink hover:border-gray-300 transition-colors mb-4"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+        </svg>
+        All groups
+      </Link>
 
       <ConfirmDialog
         open={!!confirm}
@@ -561,7 +594,14 @@ export default function GroupDetailPage() {
                 { key: 'members' as Tab, value: formatCurrency(group.feePerPlayer), label: perGame ? 'Per player' : `Per player, ${frequencyLabel(group.paymentType).toLowerCase()}` },
                 {
                   key: 'money' as Tab,
-                  value: billing && !billing.account ? 'Set up' : money.balance ? formatCurrency(Number(money.balance.available)) : '₦…',
+                  value:
+                    billing && !billing.account
+                      ? 'Set up'
+                      : money.balance
+                        ? formatCurrency(Number(money.balance.available))
+                        : money.balanceFailed
+                          ? 'Not loaded'
+                          : '₦…',
                   label: 'Balance',
                   money: true,
                 },
@@ -569,8 +609,7 @@ export default function GroupDetailPage() {
                 <button
                   key={f.label}
                   onClick={() => {
-                    if (f.key === 'money') setMoneyView('transfers');
-                    openTab(f.key);
+                    openTab(f.key, f.key === 'money' ? 'transfers' : undefined);
                     requestAnimationFrame(() => document.getElementById('group-tab-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                   }}
                   className="press min-w-0 flex flex-col px-2.5 py-2.5 text-left hover:bg-white/[0.05] first:rounded-l-2xl last:rounded-r-2xl transition-colors"
@@ -586,7 +625,7 @@ export default function GroupDetailPage() {
               ))}
             </div>
 
-            {billing?.account && (
+            {billing && (
               <button
                 onClick={() => setShowInvite(true)}
                 className={`press mt-3 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl text-[15px] transition-colors ${
@@ -614,8 +653,18 @@ export default function GroupDetailPage() {
             <button
               key={t.key}
               role="tab"
+              id={`group-tab-${t.key}`}
               aria-selected={tab === t.key}
+              aria-controls="group-panel"
+              tabIndex={tab === t.key ? 0 : -1}
               onClick={() => openTab(t.key)}
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                const i = tabs.findIndex((x) => x.key === t.key);
+                const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].key;
+                openTab(next);
+                document.getElementById(`group-tab-${next}`)?.focus();
+              }}
               className={`press relative flex-1 min-h-11 px-1 text-[13px] sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors duration-200 ${
                 tab === t.key ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
               }`}
@@ -634,7 +683,20 @@ export default function GroupDetailPage() {
         </div>
       </div>
 
-      {tab === 'table' && (table ? <LeagueTableView table={table} /> : <div className="h-40 bg-gray-100 rounded-3xl animate-pulse" />)}
+      <div id="group-panel" role="tabpanel" aria-labelledby={`group-tab-${tab}`}>
+      {tab === 'table' &&
+        (table ? (
+          <LeagueTableView table={table} />
+        ) : tableFailed ? (
+          <div className="py-10 text-center">
+            <p className="text-sm text-gray-600">The table didn&apos;t load.</p>
+            <button onClick={loadTable} className="mt-2 h-11 px-3 text-sm font-bold text-pitch-700">
+              Try again
+            </button>
+          </div>
+        ) : (
+          <div className="h-40 bg-gray-100 rounded-3xl animate-pulse" />
+        ))}
 
       {/* Money: what's come in, and what's gone out */}
       {tab === 'money' && (
@@ -650,7 +712,7 @@ export default function GroupDetailPage() {
                 key={v.key}
                 role="radio"
                 aria-checked={moneyView === v.key}
-                onClick={() => setMoneyView(v.key)}
+                onClick={() => openTab('money', v.key)}
                 className={`press min-h-10 rounded-xl text-[13px] font-bold inline-flex items-center justify-center gap-1.5 transition-colors ${
                   moneyView === v.key ? 'bg-ink text-volt-300' : 'text-gray-500 hover:text-ink'
                 }`}
@@ -676,6 +738,7 @@ export default function GroupDetailPage() {
                 balance={money.balance?.available ?? null}
                 onChange={money.setBilling}
                 onMatchTransfer={(transferId) => setFocusTransfer(transferId)}
+                showLink={false}
               />
             ) : (
               <div className="mb-3">
@@ -779,6 +842,13 @@ export default function GroupDetailPage() {
           {!group.memberships?.length ? (
             <div className="mt-2">
               <EmptyState icon="users" title="No one in the squad yet" description="Send the invite link to your group chat, or add players yourself." />
+              {user && !imAMember && (
+                <div className="mt-3 text-center">
+                  <button onClick={handleAddMe} disabled={addingMe} className="h-11 px-3 text-sm font-bold text-pitch-700 disabled:opacity-50">
+                    {addingMe ? 'Adding you…' : 'Playing too? Add yourself'}
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -947,6 +1017,7 @@ export default function GroupDetailPage() {
           )}
         </div>
       )}
+      </div>
       {showCreateSession && <NewSessionSheet groups={[group]} onClose={() => setShowCreateSession(false)} />}
     </div>
   );

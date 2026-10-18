@@ -445,7 +445,7 @@ export function MoneyCard({
               Set one up so players can pay by transfer and see their payments matched automatically.
             </p>
             <Link
-              href={`/groups/${group.id}`}
+              href={`/groups/${group.id}?tab=money`}
               className="press mt-3 inline-flex items-center justify-center h-11 px-4 rounded-xl bg-volt-400 text-sm font-bold text-ink hover:bg-volt-300 transition-colors"
             >
               Set up account
@@ -1184,7 +1184,7 @@ export function AccountDetailsSheet({
       )}
 
       <Link
-        href={`/groups/${group.id}`}
+        href={`/groups/${group.id}?tab=money`}
         className="h-11 w-full flex items-center justify-between text-sm font-bold text-ink border-t border-gray-100"
       >
         Manage account and link
