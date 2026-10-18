@@ -97,6 +97,11 @@ export function InviteSheet({
         </button>
       </div>
 
+      {/* Said out loud for screen readers when the link is copied */}
+      <p className="sr-only" aria-live="polite">
+        {copied ? 'Group link copied' : ''}
+      </p>
+
       {/* One main way to send it, WhatsApp as the quick alternative */}
       <div className="grid grid-cols-[1fr_auto] gap-2 mt-3">
         <button onClick={share} className={btnPrimary}>
@@ -106,7 +111,7 @@ export function InviteSheet({
           onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${billing.link}`)}`, '_blank', 'noopener')}
           className={`${btnSecondary} px-3.5`}
         >
-          <span className="w-2.5 h-2.5 rounded-full bg-[#25D366]" aria-hidden />
+          <WhatsAppIcon />
           WhatsApp
         </button>
       </div>
@@ -172,5 +177,12 @@ const CopyIcon = () => (
 const TickIcon = () => (
   <svg className="w-[18px] h-[18px] text-pitch-600 animate-pop-in" fill="none" viewBox="0 0 24 24" strokeWidth={2.75} stroke="currentColor" aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+  </svg>
+);
+
+/** WhatsApp's speech-bubble mark, in its green, so the button reads at a glance. */
+const WhatsAppIcon = () => (
+  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="#25D366" aria-hidden>
+    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.82 14.13c-.25.69-1.44 1.32-1.98 1.36-.5.05-.98.24-3.31-.69-2.8-1.1-4.58-3.97-4.72-4.15-.14-.18-1.12-1.49-1.12-2.85 0-1.35.71-2.02.96-2.29.25-.28.55-.35.73-.35l.53.01c.17.01.4-.06.62.48.25.6.84 2.06.92 2.21.07.14.12.31.02.5-.1.18-.14.3-.28.46l-.42.49c-.14.14-.29.29-.12.57.17.28.74 1.22 1.6 1.98 1.1.98 2.02 1.28 2.31 1.43.28.14.45.12.61-.07.17-.19.71-.83.9-1.11.19-.28.37-.23.63-.14.26.1 1.64.77 1.92.91.28.14.47.21.54.33.07.11.07.66-.18 1.35Z" />
   </svg>
 );

@@ -367,7 +367,14 @@ export default function Dashboard() {
       title: 'Money',
       actions: [
         gid ? { key: 'history', label: 'Transfer history', icon: icon(ICON_PATHS.history), href: `/groups/${gid}?tab=transfers` } : null,
-        liveGame ? { key: 'payments', label: "This game's payments", icon: icon(ICON_PATHS.cash), href: `/sessions/${liveGame.id}?tab=payments` } : null,
+        liveGame
+          ? {
+              key: 'payments',
+              label: `Payments · ${gameDay(liveGame.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`,
+              icon: icon(ICON_PATHS.cash),
+              href: `/sessions/${liveGame.id}?tab=payments`,
+            }
+          : null,
       ].filter(Boolean) as MoreAction[],
     },
     {
@@ -461,7 +468,8 @@ export default function Dashboard() {
       <QuickActions actions={quick} onMore={() => setShowMore(true)} />
 
       {/* The top two; the rest are in the bell */}
-      <NeedsYou items={needs.filter((n) => n.key !== 'new').slice(0, 2)} />
+      {/* Only what the card above doesn't already show; the bell keeps the full list */}
+      <NeedsYou items={needs.filter((n) => !['new', 'unmatched', 'owing'].includes(n.key)).slice(0, 2)} />
 
       {comingUp.length > 0 && (
         <section className="mt-6" aria-labelledby="coming-up">

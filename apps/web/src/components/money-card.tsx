@@ -284,19 +284,6 @@ function useHiddenBalance() {
   return [hidden, toggle] as const;
 }
 
-/** Halfway line with the centre circle: splits "the account" from "this week's game". */
-function HalfwayLine() {
-  return (
-    <svg className="w-full h-6 my-3" viewBox="0 0 320 24" preserveAspectRatio="none" aria-hidden>
-      <g stroke="white" strokeOpacity="0.18" strokeWidth="1.5" fill="none" vectorEffect="non-scaling-stroke">
-        <line x1="0" y1="12" x2="140" y2="12" vectorEffect="non-scaling-stroke" />
-        <line x1="180" y1="12" x2="320" y2="12" vectorEffect="non-scaling-stroke" />
-      </g>
-      <circle cx="160" cy="12" r="10" stroke="white" strokeOpacity="0.18" strokeWidth="1.5" fill="none" />
-      <circle cx="160" cy="12" r="2" fill="white" fillOpacity="0.3" />
-    </svg>
-  );
-}
 
 // ── The card ──
 
@@ -405,11 +392,10 @@ export function MoneyCard({
     }
   }
 
+  const cardCls = 'relative rounded-[28px] bg-ink text-white overflow-hidden shadow-lift';
   return (
-    <section
-      aria-label={`${group.name} money`}
-      className="relative rounded-[28px] bg-ink text-white overflow-hidden shadow-lift"
-    >
+    <>
+    <section aria-label={`${group.name} account`} className={cardCls}>
       <div className="absolute inset-0 turf-stripes" />
       <div className="relative p-5">
         {/* The account: whose money, refresh, fold */}
@@ -520,9 +506,9 @@ export function MoneyCard({
         {hasAccount && balance && transfers && (
           <div className="mt-4 grid grid-cols-[1fr_1fr_auto] rounded-2xl bg-white/[0.06] divide-x divide-white/[0.08]">
             {[
-              { label: 'Received today', value: hidden ? '₦•••' : formatCurrency(todayIn), tone: todayIn > 0 ? 'text-volt-300' : 'text-white' },
-              { label: 'Total received', value: hidden ? '₦•••' : formatCurrency(Number(balance.totalIn)), tone: 'text-white' },
-              { label: 'Transfers in', value: transfersCount, tone: 'text-white' },
+              { label: 'Received today', value: hidden ? '₦•••' : formatCurrency(todayIn) },
+              { label: 'Total received', value: hidden ? '₦•••' : formatCurrency(Number(balance.totalIn)) },
+              { label: 'Transfers in', value: transfersCount },
             ].map((f, i) => (
               <button
                 key={f.label}
@@ -530,7 +516,7 @@ export function MoneyCard({
                 style={stagger(i, 60, 100)}
                 className="press animate-rise min-w-0 flex flex-col justify-start px-2.5 py-2.5 text-left hover:bg-white/[0.05] first:rounded-l-2xl last:rounded-r-2xl transition-colors"
               >
-                <span className={`block font-display text-[15px] font-extrabold tabular-nums tracking-tight whitespace-nowrap ${f.tone}`}>{f.value}</span>
+                <span className="block text-[14px] font-bold text-white/90 tabular-nums tracking-tight whitespace-nowrap">{f.value}</span>
                 <span className="block mt-0.5 text-[11px] font-bold leading-tight text-white/65">{f.label}</span>
               </button>
             ))}
@@ -598,7 +584,7 @@ export function MoneyCard({
                     {unmatched ? (
                       <span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-bold text-sun-400">
                         <LiveDot className="bg-sun-400" />
-                        Who paid this?
+                        Match to player
                       </span>
                     ) : (
                       <span className="block text-[11px] font-semibold text-white/65 tabular-nums">{ago(t.receivedAt, now)}</span>
@@ -639,8 +625,12 @@ export function MoneyCard({
           <TransfersSheet transfers={transfers} groupId={group.id} hidden={hidden} openId={sheet.id} onClose={() => setSheet(null)} />
         )}
 
-        <HalfwayLine />
+      </div>
+    </section>
 
+    <section aria-label="This week's game" className={`mt-3 ${cardCls}`}>
+      <div className="absolute inset-0 turf-stripes" />
+      <div className="relative p-5">
         {game ? (
           <GameSection
             game={game}
@@ -671,14 +661,15 @@ export function MoneyCard({
       </div>
       <ConfirmSheet
         open={confirmEnd}
-        title="End this game?"
-        message="Every player gets a link to vote for Player of the Match. You can reopen the game later."
-        confirmLabel="End game"
+        title="End the game and open the vote?"
+        message="Every player gets a link to vote for Player of the Match. Players who still owe can carry on paying, and you can reopen the game later."
+        confirmLabel="End & open vote"
         cancelLabel="Not yet"
         onConfirm={endGame}
         onCancel={() => setConfirmEnd(false)}
       />
     </section>
+    </>
   );
 }
 
@@ -721,20 +712,33 @@ function GameSection({
   const kickoff = game.kickoffTime || game.group?.kickoffTime;
   const when = gameDay(game.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   const heading = phase === 'matchday' ? 'Match day' : phase === 'after' ? (days === -1 ? "Yesterday's game" : 'Last game') : 'Next game';
-  const chip = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days > 1 ? `In ${days} days` : game.status === 'completed' ? 'Ended' : 'Not ended yet';
+  const chip = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days > 1 ? `In ${days} days` : game.status === 'completed' ? 'Ended' : 'Vote not open';
   const gameHref = `/sessions/${game.id}`;
   const notEnded = phase === 'after' && game.status !== 'completed';
 
-  // Three numbers worth a glance, each a shortcut to the list behind it.
-  const tiles: { label: string; value: number; of?: number; tone: string; href: string }[] = [
-    { label: 'Paid', value: paid.length, tone: 'text-volt-300', href: `${gameHref}?tab=payments` },
-    { label: 'Still owe', value: owing.length, tone: owing.length ? 'text-sun-400' : 'text-white', href: `${gameHref}?tab=payments` },
-    rsvp?.requireRsvp
-      ? rsvp.waitlist.length && rsvp.in.length >= rsvp.capacity
-        ? { label: `In · ${rsvp.waitlist.length} waiting`, value: rsvp.in.length, of: rsvp.capacity, tone: 'text-white', href: `${gameHref}?tab=teams` }
-        : { label: 'In', value: rsvp.in.length, of: rsvp.capacity, tone: 'text-white', href: `${gameHref}?tab=teams` }
-      : { label: 'Squad', value: payments.length, tone: 'text-white', href: `${gameHref}?tab=teams` },
-  ];
+  // Where the game's money stands, kept apart so nobody has to do the sums: paid, owed by
+  // players who've confirmed, and spots nobody has taken yet. The target is spots × fee
+  // (gameTarget on the server), so the open spots aren't owed by anyone.
+  const fee = Number(game.group?.feePerPlayer ?? 0);
+  const owedAmount = owing.reduce((sum, p) => sum + Number(p.amount), 0);
+  const capacity = rsvp?.requireRsvp ? rsvp.capacity : Number(game.group?.targetPlayers ?? 0);
+  const taken = rsvp?.requireRsvp ? rsvp.in.length : payments.length;
+  const openSpots = Math.max(0, capacity - taken);
+  const openAmount = Math.max(0, target - collected - owedAmount);
+  const rows = [
+    { key: 'paid', dot: 'bg-volt-400', label: `${formatCurrency(collected)} paid by ${paid.length}`, href: `${gameHref}?tab=payments` },
+    owing.length
+      ? { key: 'owed', dot: 'bg-sun-400', label: `${formatCurrency(owedAmount)} still owed by ${owing.length}`, href: `${gameHref}?tab=payments` }
+      : null,
+    openSpots > 0
+      ? {
+          key: 'open',
+          dot: 'bg-white/25',
+          label: `${openSpots} spot${openSpots === 1 ? '' : 's'} open${openAmount > 0 ? ` (${formatCurrency(openAmount)})` : ''}`,
+          href: `${gameHref}?tab=teams`,
+        }
+      : null,
+  ].filter(Boolean) as { key: string; dot: string; label: string; href: string }[];
 
   return (
     <div>
@@ -766,87 +770,73 @@ function GameSection({
           onExpand={onToggle}
           value={coveredByDues ? `${paid.length}/${payments.length}` : formatCurrency(collected)}
           valueTone="text-white"
-          caption={coveredByDues ? 'paid their dues' : `of ${formatCurrency(target)} collected`}
-          action={
-            owing.length > 0
-              ? { label: `${owing.length} player${owing.length === 1 ? '' : 's'} still owe${owing.length === 1 ? 's' : ''}`, href: `${gameHref}?tab=payments` }
-              : null
+          caption={
+            coveredByDues
+              ? 'paid their dues'
+              : `collected · ${formatCurrency(owedAmount)} still owed${openSpots ? ` · ${openSpots} spots open` : ''}`
           }
+          action={null}
         />
       )}
 
       <Collapse open={open} id={bodyId}>
 
-      {/* Collected so far — transfers and by-hand payments as separate parts of the bar */}
+      {/* Collected so far, then one bar split into paid / owed / open */}
       <div className="mt-3 flex items-baseline gap-1.5 flex-wrap">
         {coveredByDues ? (
           <>
             <span className="font-display text-[28px] font-extrabold tabular-nums leading-none">{paid.length}</span>
-            <span className="text-sm text-white/65 tabular-nums">of {payments.length} paid their dues</span>
+            <span className="text-sm text-white/70 tabular-nums">of {payments.length} paid their dues</span>
           </>
         ) : (
           <>
             <CountUpNaira value={collected} className="font-display text-[28px] font-extrabold leading-none" />
-            <span className="text-sm text-white/65 tabular-nums">of {formatCurrency(target)} collected</span>
-
+            <span className="text-sm text-white/70 tabular-nums">collected of {formatCurrency(target)}</span>
           </>
         )}
       </div>
-      {!coveredByDues && byHand > 0 && (
-        <p className="text-xs text-white/60 mt-1.5 flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-volt-300/50" aria-hidden />
-          {formatCurrency(byHand)} marked paid by hand
-        </p>
-      )}
-      <div className="mt-3 flex items-center gap-2.5">
       <div
-        className="relative h-2.5 flex-1 min-w-0 rounded-full bg-white/12 overflow-hidden"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(coveredByDues ? duesPct : pct(collected))}
-        aria-label="Collected for this game"
+        className="mt-3 relative h-2.5 w-full rounded-full bg-white/12 overflow-hidden"
+        role="img"
+        aria-label={
+          coveredByDues
+            ? `${paid.length} of ${payments.length} paid their dues`
+            : `${formatCurrency(collected)} paid, ${formatCurrency(owedAmount)} still owed, ${formatCurrency(openAmount)} in open spots`
+        }
       >
         {coveredByDues ? (
           <div className="h-full bg-volt-400 rounded-full transition-[width] duration-500 origin-left animate-fill-grow" style={{ width: `${duesPct}%` }} />
         ) : (
           <div className="flex h-full origin-left animate-fill-grow">
             <div className="h-full bg-volt-400 transition-[width] duration-500" style={{ width: `${pct(byTransfer)}%` }} />
-            <div className="h-full bg-volt-300/50 transition-[width] duration-500" style={{ width: `${pct(byHand)}%` }} />
+            <div className="h-full bg-volt-300/60 transition-[width] duration-500" style={{ width: `${pct(byHand)}%` }} />
+            <div className="h-full bg-sun-400 transition-[width] duration-500" style={{ width: `${pct(owedAmount)}%` }} />
           </div>
         )}
-        {/* Halfway mark, like the line on the pitch */}
-        <span className="absolute left-1/2 top-0 bottom-0 w-px bg-white/25" aria-hidden />
-      </div>
-        <span className="shrink-0 w-10 text-right text-xs font-extrabold text-volt-300 tabular-nums">
-          <CountUp value={Math.round(coveredByDues ? duesPct : pct(collected))} />%
-        </span>
       </div>
 
-      <div className="mt-3.5">
+      {/* The bar in words; each line opens the list behind it */}
+      {!coveredByDues && (
+        <ul className="mt-2.5 -mx-1.5">
+          {rows.map((r, i) => (
+            <li key={r.key} className="animate-rise" style={stagger(i, 50, 200)}>
+              <Link href={r.href} className="press flex items-center gap-2.5 min-h-10 px-1.5 rounded-xl text-[13px] font-semibold text-white/85 hover:bg-white/[0.06] transition-colors">
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${r.dot}`} aria-hidden />
+                <span className="flex-1 min-w-0 truncate tabular-nums">{r.label}</span>
+                <svg className="w-3.5 h-3.5 shrink-0 text-white/45" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                </svg>
+              </Link>
+            </li>
+          ))}
+          {byHand > 0 && <li className="px-1.5 text-[11px] text-white/60">{formatCurrency(byHand)} of the paid amount was marked paid by hand</li>}
+        </ul>
+      )}
+
+      {/* The squad as shirts: a picture of the lines above, with its key */}
+      <div className="mt-3">
         <ShirtRow payments={payments} />
-      </div>
-
-      <div className="mt-3.5 grid grid-cols-3 gap-2">
-        {tiles.map((t, i) => (
-          <Link
-            key={t.label}
-            href={t.href}
-            style={stagger(i, 60, 200)}
-            className="press animate-rise rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] px-3 py-2.5 transition-colors"
-          >
-            <span className={`block font-display text-xl font-extrabold leading-none tabular-nums ${t.tone}`}>
-              <CountUp value={t.value} />
-              {t.of != null && <span className="text-sm text-white/60">/{t.of}</span>}
-            </span>
-            <span className="mt-1 flex items-center justify-between gap-1 text-[11px] font-bold text-white/70">
-              <span className="truncate">{t.label}</span>
-              <svg className="w-3 h-3 shrink-0 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-              </svg>
-            </span>
-          </Link>
-        ))}
+        <p className="mt-1.5 text-[11px] text-white/60">Filled shirt = paid · dashed = not paid yet</p>
       </div>
 
       </Collapse>
@@ -857,10 +847,14 @@ function GameSection({
         <button
           onClick={onEnd}
           disabled={ending}
-          className="press mt-2.5 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl border border-white/20 text-[15px] font-extrabold text-white hover:bg-white/10 disabled:opacity-60 transition-colors"
+          className={
+            owing.length
+              ? 'press mt-2.5 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl border border-white/20 text-[15px] font-extrabold text-white hover:bg-white/10 disabled:opacity-60 transition-colors'
+              : primaryCls
+          }
         >
           <TickIcon />
-          {ending ? 'Ending the game…' : 'End game'}
+          {ending ? 'Ending the game…' : 'End game & open the vote'}
         </button>
       )}
     </div>
@@ -900,16 +894,21 @@ function PrimaryAction({
     );
   }
   if (phase === 'after') {
-    return owing > 0 ? (
-      <Link href={`${href}?tab=payments`} className={primaryCls}>
-        <Shine />
-        See what&apos;s still owed
-        <Chevron />
-      </Link>
-    ) : (
+    if (owing > 0) {
+      return (
+        <Link href={`${href}?tab=payments`} className={primaryCls}>
+          <Shine />
+          Review {owing} unpaid player{owing === 1 ? '' : 's'}
+          <Chevron />
+        </Link>
+      );
+    }
+    // Everyone's paid and the game isn't ended: ending it (below) is the one thing to do.
+    if (game.status !== 'completed') return null;
+    return (
       <Link href={`${href}?tab=stars`} className={primaryCls}>
         <Shine />
-        Open the vote
+        See the vote
         <Chevron />
       </Link>
     );
