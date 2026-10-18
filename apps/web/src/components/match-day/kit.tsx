@@ -36,6 +36,23 @@ export const BIB: Record<TeamKey, { fill: string; ink: string }> = {
   F: { fill: '#e5484d', ink: '#0f1a14' },
 };
 
+/**
+ * Once a side goes by its captain, its bib colour as a word beside the name ("Team Baba · Orange"),
+ * so nobody has to tell the colours apart by eye. Nothing when the name already is the colour.
+ */
+export function BibWord({
+  team,
+  captains,
+  className = 'text-gray-500',
+}: {
+  team: TeamKey;
+  captains?: Partial<Record<TeamKey, string>>;
+  className?: string;
+}) {
+  if (!captains?.[team]) return null;
+  return <span className={`shrink-0 font-semibold ${className}`}>{TEAMS[team].name}</span>;
+}
+
 /** For screen readers once a side is named after its captain: "Team Baba, orange bib". */
 export function teamWithBib(team: TeamKey, captains?: Partial<Record<TeamKey, string>>) {
   const name = teamName(team, captains);

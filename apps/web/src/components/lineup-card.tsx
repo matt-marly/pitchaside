@@ -3,7 +3,7 @@
 import { MatchDayBoard } from '@/components/match-day/board';
 
 // Bib colours and team names live with the match-day board; players' screens import them from here.
-export { TEAMS, teamName } from '@/components/match-day/kit';
+export { BibWord, TEAMS, teamName } from '@/components/match-day/kit';
 
 /**
  * Match day: split the squad into 2–6 coloured sides — each can have a captain it's named after —

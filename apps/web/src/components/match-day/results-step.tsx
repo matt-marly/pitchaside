@@ -8,7 +8,7 @@ import { Trophy } from '@/components/illustrations';
 import { useToast } from '@/components/toast';
 import type { Lineup, MatchGame, TeamKey } from '@/lib/api';
 import type { LineupActions } from './board';
-import { Shirt, TEAMS, TEAM_KEYS, teamName, teamWithBib } from './kit';
+import { BibWord, Shirt, TEAMS, TEAM_KEYS, teamName, teamWithBib } from './kit';
 
 type Draft = { teamA: TeamKey; teamB: TeamKey; scoreA: number; scoreB: number };
 
@@ -100,7 +100,7 @@ function TeamChoice({
             >
               <Shirt team={t} className="w-7 h-7" onDark={on} />
               <span className="max-w-[9rem] truncate">{teamName(t, captains)}</span>
-              {captains[t] && <span className="sr-only">, {TEAMS[t].name.toLowerCase()} bib</span>}
+              <BibWord team={t} captains={captains} className={`text-xs ${on ? 'text-white/60' : 'text-gray-500'}`} />
             </button>
           );
         })}
@@ -236,6 +236,7 @@ export function ResultsStep({ lineup, actions, matchDay }: { lineup: Lineup; act
                 <span className="font-display text-2xl font-extrabold leading-tight truncate">{teamName(top.team, lineup.captains)}</span>
               </div>
               <p className="mt-1 text-xs text-white/70 tabular-nums">
+                {lineup.captains[top.team] && `${TEAMS[top.team].name} bibs · `}
                 {top.pts} pts · {top.w}W {top.d}D {top.l}L
               </p>
             </>
@@ -273,7 +274,8 @@ export function ResultsStep({ lineup, actions, matchDay }: { lineup: Lineup; act
               >
                 <span role="rowheader" className="flex items-center gap-2 min-w-0 font-bold text-ink">
                   <Shirt team={r.team} className="w-6 h-6 shrink-0" />
-                  <span className="truncate">{teamName(r.team, lineup.captains)}</span>
+                  <span className="truncate">{teamName(r.team, lineup.captains).replace(/^Team /, '')}</span>
+                  <BibWord team={r.team} captains={lineup.captains} className="text-xs text-gray-500" />
                 </span>
                 {[r.p, r.w, r.d, r.l].map((v, i) => (
                   <span key={i} role="cell" className="text-center text-gray-600 tabular-nums">
@@ -345,7 +347,7 @@ export function ResultsStep({ lineup, actions, matchDay }: { lineup: Lineup; act
         </section>
       )}
 
-      <div className="sticky z-10 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-4 mt-4">
+      <div className="sticky z-10 bottom-[calc(var(--tabbar-space)+env(safe-area-inset-bottom))] md:bottom-4 mt-4">
         <button
           onClick={() => setAdding(true)}
           className="w-full min-h-14 rounded-2xl bg-volt-400 text-ink text-base font-extrabold border-2 border-ink shadow-sticker hover:bg-volt-300 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition flex items-center justify-center gap-2"

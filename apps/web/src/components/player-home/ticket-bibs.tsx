@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { TEAMS, teamName } from '@/components/lineup-card';
+import { BibWord, TEAMS, teamName } from '@/components/lineup-card';
 import { MatchDayBibs } from '@/components/match-day-bibs';
 import { buzz } from '@/components/motion';
 import { Sheet } from '@/components/sheet';
@@ -83,7 +83,7 @@ export function TicketBibs({ sessionId, onPicked }: { sessionId: string; onPicke
                     />
                   )}
                   {teamName(t, lineup.captains)}
-                  {hasCaptains && lineup.captains[t] && <span className="sr-only">, {TEAMS[t].name.toLowerCase()} bib</span>}
+                  {hasCaptains && <BibWord team={t} captains={lineup.captains} className="text-xs opacity-70" />}
                   {mine && <span aria-hidden>✓</span>}
                 </button>
               );

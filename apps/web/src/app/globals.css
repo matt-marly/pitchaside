@@ -245,3 +245,21 @@
   80% { opacity: 1; }
   100% { opacity: 0; transform: translate3d(var(--drift, 0px), 105vh, 0) rotate(var(--spin, 360deg)); }
 }
+
+/* Room the phone tab bar takes up; sticky action bars sit just above it. */
+:root {
+  --tabbar-space: 4.75rem;
+}
+
+/* Match day on a small phone: hide the tab bar so the board gets the screen (Back still leads out). */
+@media (max-width: 380px) {
+  body[data-focus='matchday'] {
+    --tabbar-space: 0.75rem;
+  }
+  body[data-focus='matchday'] [data-tabbar] {
+    display: none;
+  }
+  body[data-focus='matchday'] main {
+    padding-bottom: 1.5rem;
+  }
+}

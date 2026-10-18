@@ -12,6 +12,7 @@ import {
   getRsvpBoard,
   getSession,
   sendReminders,
+  updateSessionStatus,
   type BankTransfer,
   type GroupBalance,
   type GroupBilling,
@@ -22,6 +23,7 @@ import {
 import { formatAccountNumber, frequencyShort, paymentShareText } from '@/lib/billing';
 import { CountUpNaira } from '@/components/motion';
 import { Sheet } from '@/components/sheet';
+import { ConfirmSheet } from '@/components/match-day/confirm-sheet';
 import { useToast } from '@/components/toast';
 import { prettyTime } from '@/components/player-ui';
 
@@ -319,6 +321,7 @@ export function MoneyCard({
   canManage,
   onOpenAccount,
   onScheduleGame,
+  onGameEnded,
 }: {
   group: IGroupWithMembers;
   money: ReturnType<typeof useGroupMoney>;
@@ -327,11 +330,15 @@ export function MoneyCard({
   canManage: boolean;
   onOpenAccount: () => void;
   onScheduleGame: () => void;
+  /** Called once a game is ended from the card, so the page can update its copy. */
+  onGameEnded?: (gameId: string) => void;
 }) {
   const toast = useToast();
   const now = useNow();
   const [hidden, toggleHidden] = useHiddenBalance();
   const [reminding, setReminding] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [ending, setEnding] = useState(false);
   const { balance, billing, transfers, rsvp, updatedAt, balanceFailed, fresh } = money;
   const game = money.game ?? gameFallback;
 
@@ -356,6 +363,22 @@ export function MoneyCard({
       toast.error('Reminders didn’t send. Check your connection and try again.');
     } finally {
       setReminding(false);
+    }
+  }
+
+  async function endGame() {
+    if (!game) return;
+    setConfirmEnd(false);
+    setEnding(true);
+    try {
+      await updateSessionStatus(game.id, 'completed');
+      toast.success('Game ended. Voting is open.');
+      onGameEnded?.(game.id);
+      money.reload();
+    } catch {
+      toast.error('The game didn’t end. Check your connection and try again.');
+    } finally {
+      setEnding(false);
     }
   }
 
@@ -488,7 +511,15 @@ export function MoneyCard({
         <HalfwayLine />
 
         {game ? (
-          <GameSection game={game} rsvp={rsvp} canManage={canManage} reminding={reminding} onRemind={remind} />
+          <GameSection
+            game={game}
+            rsvp={rsvp}
+            canManage={canManage}
+            reminding={reminding}
+            onRemind={remind}
+            ending={ending}
+            onEnd={() => setConfirmEnd(true)}
+          />
         ) : (
           <div>
             <p className="font-display text-xl font-extrabold leading-tight">No game this week</p>
@@ -505,6 +536,15 @@ export function MoneyCard({
           </div>
         )}
       </div>
+      <ConfirmSheet
+        open={confirmEnd}
+        title="End this game?"
+        message="Every player gets a link to vote for Player of the Match. You can reopen the game later."
+        confirmLabel="End game"
+        cancelLabel="Not yet"
+        onConfirm={endGame}
+        onCancel={() => setConfirmEnd(false)}
+      />
     </section>
   );
 }
@@ -521,12 +561,16 @@ function GameSection({
   canManage,
   reminding,
   onRemind,
+  ending,
+  onEnd,
 }: {
   game: ISessionWithDetails;
   rsvp: RsvpBoard | null;
   canManage: boolean;
   reminding: boolean;
   onRemind: () => void;
+  ending: boolean;
+  onEnd: () => void;
 }) {
   const phase = phaseOf(game);
   const days = daysFromToday(game.date);
@@ -624,6 +668,17 @@ function GameSection({
       )}
 
       <PrimaryAction phase={phase} game={game} owing={owing.length} canManage={canManage} reminding={reminding} onRemind={onRemind} />
+      {/* A played game nobody ended: voting only opens once it is */}
+      {phase === 'after' && game.status !== 'completed' && canManage && (
+        <button
+          onClick={onEnd}
+          disabled={ending}
+          className="mt-2.5 w-full h-12 inline-flex items-center justify-center gap-2 rounded-2xl border border-white/20 text-[15px] font-extrabold text-white hover:bg-white/10 active:scale-[0.98] disabled:opacity-60 transition"
+        >
+          <TickIcon />
+          {ending ? 'Ending the game…' : 'End game'}
+        </button>
+      )}
     </div>
   );
 }
@@ -688,6 +743,12 @@ function PrimaryAction({
 const Chevron = () => (
   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+  </svg>
+);
+
+const TickIcon = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.75} stroke="currentColor" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
   </svg>
 );
 

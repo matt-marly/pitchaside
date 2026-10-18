@@ -84,6 +84,16 @@ export default function SessionDetailPage() {
     );
   }, [session, tab]);
 
+  // Match day on a small phone: the tab bar steps aside so the board gets the whole screen.
+  const matchDayFocus = tab === 'teams' && session?.kind !== 'dues' && session?.status !== SessionStatus.CANCELLED;
+  useEffect(() => {
+    if (!matchDayFocus) return;
+    document.body.dataset.focus = 'matchday';
+    return () => {
+      delete document.body.dataset.focus;
+    };
+  }, [matchDayFocus]);
+
   function chooseTab(t: Tab) {
     setTab(t);
     const url = new URL(window.location.href);

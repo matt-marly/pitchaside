@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { buzz } from '@/components/motion';
 import type { Lineup } from '@/lib/api';
 import type { LineupActions } from './board';
-import { Armband, Shirt, TEAMS, TEAM_KEYS, avgOf, pitchName, teamName } from './kit';
+import { Armband, BibWord, Shirt, TEAM_KEYS, avgOf, pitchName, teamName } from './kit';
 
 /**
  * Step 2: one card per team; tap a name to give them the armband (one per team). The team then
@@ -61,8 +61,8 @@ export function CaptainsStep({
                 <Shirt team={t} label={members.length} className="w-9 h-9 shrink-0" onDark />
                 <h2 key={name} className={`flex-1 min-w-0 font-display text-lg font-extrabold text-white truncate ${anim('animate-flip-in')}`}>
                   {name}
-                  {lineup.captains[t] && <span className="sr-only">, {TEAMS[t].name.toLowerCase()} bib</span>}
                 </h2>
+                <BibWord team={t} captains={lineup.captains} className="text-xs text-white/60" />
                 {avg != null && <span className="shrink-0 text-[11px] font-bold text-white/60">avg {avg}</span>}
               </header>
               {members.length === 0 ? (
@@ -110,7 +110,7 @@ export function CaptainsStep({
         })}
       </div>
 
-      <div className="sticky z-10 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-4 mt-4">
+      <div className="sticky z-10 bottom-[calc(var(--tabbar-space)+env(safe-area-inset-bottom))] md:bottom-4 mt-4">
         <button
           onClick={onNext}
           className={`w-full min-h-14 rounded-2xl text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-lift transition-colors ${

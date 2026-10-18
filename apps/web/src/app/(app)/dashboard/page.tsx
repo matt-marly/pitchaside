@@ -357,6 +357,9 @@ export default function Dashboard() {
           canManage={canManage}
           onOpenAccount={() => setShowAccount(true)}
           onScheduleGame={() => setShowNewGame(true)}
+          onGameEnded={(id) =>
+            setSessions((all) => all.map((s) => (s.id === id ? { ...s, status: SessionStatus.COMPLETED } : s)))
+          }
         />
       )}
 
