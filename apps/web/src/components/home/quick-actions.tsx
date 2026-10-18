@@ -29,7 +29,7 @@ export function QuickActions({ actions, onMore }: { actions: QuickAction[]; onMo
           </svg>
         </button>
       </div>
-      <div className="grid rounded-3xl bg-white border border-gray-100 shadow-card p-1.5" style={{ gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))` }}>
+      <div className="grid rounded-3xl bg-white border border-gray-100 shadow-card p-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(actions.length, 4)}, minmax(0, 1fr))` }}>
         {actions.map((a, i) => (
           <button
             key={a.key}

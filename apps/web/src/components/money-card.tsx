@@ -406,7 +406,7 @@ export function MoneyCard({
   return (
     <>
     <section aria-label={`${group.name} account`} className={cardCls}>
-      <div className="absolute inset-0 turf-stripes" />
+      <div className="absolute inset-0 turf-stripes-soft" />
       <div className="relative p-5">
         {/* The account: whose money, refresh, fold */}
         <div className="flex items-center justify-between gap-2">
@@ -414,15 +414,8 @@ export function MoneyCard({
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/65">Account</p>
             <p className="text-sm font-semibold text-white truncate">{group.name}</p>
           </div>
+          {hasAccount && (
           <div className="flex items-center gap-1 shrink-0">
-            {!hasAccount && (
-              <Link
-                href={`/groups/${group.id}`}
-                className="press inline-flex items-center h-11 px-3.5 rounded-full bg-volt-400 text-[13px] font-bold text-ink"
-              >
-                Set up account
-              </Link>
-            )}
             <button
               onClick={refresh}
               disabled={refreshing}
@@ -435,10 +428,27 @@ export function MoneyCard({
             </button>
             <CollapseButton open={accountOpen} onClick={toggleAccount} controls={accountId} label="account" onDark />
           </div>
+          )}
         </div>
 
+        {/* No bank account yet: say so plainly instead of showing a ₦0 balance */}
+        {!hasAccount && (
+          <div className="mt-4 rounded-2xl bg-white/[0.06] p-4">
+            <p className="text-sm font-bold text-white">No bank account yet</p>
+            <p className="mt-1 text-[13px] text-white/70 leading-snug">
+              Set one up so players can pay by transfer and see their payments matched automatically.
+            </p>
+            <Link
+              href={`/groups/${group.id}`}
+              className="press mt-3 inline-flex items-center justify-center h-11 px-4 rounded-xl bg-volt-400 text-sm font-bold text-ink hover:bg-volt-300 transition-colors"
+            >
+              Set up account
+            </Link>
+          </div>
+        )}
+
         {/* Folded: the figure that matters, and anything that needs them */}
-        {!accountOpen && (
+        {hasAccount && !accountOpen && (
           <FoldedSummary
             onExpand={toggleAccount}
             value={balance == null ? '₦…' : hidden ? '₦••••••' : formatCurrency(Number(balance.available))}
@@ -452,6 +462,7 @@ export function MoneyCard({
           />
         )}
 
+        {hasAccount && (
         <Collapse open={accountOpen} id={accountId}>
         {/* The balance: the number organisers check */}
         <div className="mt-3 flex items-center gap-1">
@@ -642,6 +653,7 @@ export function MoneyCard({
           </p>
         )}
         </Collapse>
+        )}
         {sheet && transfers && (
           <TransfersSheet transfers={transfers} groupId={group.id} hidden={hidden} openId={sheet.id} onClose={() => setSheet(null)} />
         )}
@@ -650,7 +662,7 @@ export function MoneyCard({
     </section>
 
     <section aria-label="This week's game" className={`mt-3 ${cardCls}`}>
-      <div className="absolute inset-0 turf-stripes" />
+      <div className="absolute inset-0 turf-stripes-soft" />
       <div className="relative p-5">
         {game ? (
           <GameSection
@@ -668,7 +680,11 @@ export function MoneyCard({
         ) : (
           <div>
             <p className="font-display text-xl font-extrabold leading-tight">No game this week</p>
-            <p className="text-sm text-white/60 mt-1">Schedule one and everyone in the group gets a due for it.</p>
+            <p className="text-sm text-white/70 mt-1">
+              {group.requireRsvp
+                ? 'Schedule one and players can say they’re in. Each one owes the fee once they do.'
+                : 'Schedule one and everyone in the group gets a due for it.'}
+            </p>
             {canManage && (
               <button
                 onClick={onScheduleGame}
@@ -1084,7 +1100,7 @@ export function AccountDetailsSheet({
         onClick={() => copy(account.accountNumber, 'Account number')}
         className="mt-4 w-full text-left rounded-2xl bg-ink text-white p-4 relative overflow-hidden"
       >
-        <span className="absolute inset-0 turf-stripes" aria-hidden />
+        <span className="absolute inset-0 turf-stripes-soft" aria-hidden />
         <span className="relative block text-xs font-semibold text-white/60">{account.bankName}</span>
         <span className="relative flex items-center justify-between gap-2 mt-1">
           <span className="font-display text-[26px] font-extrabold tracking-[0.04em] tabular-nums text-volt-300">
