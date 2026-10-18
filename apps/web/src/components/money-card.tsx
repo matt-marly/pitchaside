@@ -123,6 +123,8 @@ export function useGroupMoney(groupId: string | null, gameId: string | null) {
   const [game, setGame] = useState<ISessionWithDetails | null>(null);
   const [rsvp, setRsvp] = useState<RsvpBoard | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  // The balance call failed and there's nothing true to show yet.
+  const [balanceFailed, setBalanceFailed] = useState(false);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const seen = useRef<Set<string> | null>(null);
   // Which group/game the screen is on now; answers for an earlier one are dropped.
@@ -141,6 +143,7 @@ export function useGroupMoney(groupId: string | null, gameId: string | null) {
     ]);
     if (current.current !== key) return;
     if (b.status === 'fulfilled') setBalance(b.value);
+    setBalanceFailed(b.status === 'rejected');
     if (bill.status === 'fulfilled') setBilling(bill.value);
     if (g.status === 'fulfilled') setGame(g.value);
     if (r.status === 'fulfilled') setRsvp(r.value);
@@ -166,6 +169,7 @@ export function useGroupMoney(groupId: string | null, gameId: string | null) {
     setGame(null);
     setRsvp(null);
     setUpdatedAt(null);
+    setBalanceFailed(false);
     setFresh(new Set());
   }, [groupId, gameId]);
 
@@ -183,7 +187,7 @@ export function useGroupMoney(groupId: string | null, gameId: string | null) {
     };
   }, [groupId, load]);
 
-  return { balance, billing, transfers, game, rsvp, updatedAt, fresh, reload: load, setBilling };
+  return { balance, billing, transfers, game, rsvp, updatedAt, balanceFailed, fresh, reload: load, setBilling };
 }
 
 // ── Pieces ──
@@ -328,7 +332,7 @@ export function MoneyCard({
   const now = useNow();
   const [hidden, toggleHidden] = useHiddenBalance();
   const [reminding, setReminding] = useState(false);
-  const { balance, billing, transfers, rsvp, updatedAt, fresh } = money;
+  const { balance, billing, transfers, rsvp, updatedAt, balanceFailed, fresh } = money;
   const game = money.game ?? gameFallback;
 
   const ticker = (transfers ?? [])
@@ -389,20 +393,42 @@ export function MoneyCard({
           <button
             onClick={toggleHidden}
             aria-pressed={hidden}
-            aria-label={hidden ? 'Show balance' : 'Hide balance'}
+            aria-label="Hide balance"
             className="w-11 h-11 -my-3 -ml-1.5 flex items-center justify-center rounded-full text-white/60 hover:text-white transition-colors"
           >
             <EyeIcon off={hidden} />
           </button>
         </div>
-        <p className="font-display text-[44px] leading-none font-extrabold text-volt-300 mt-1.5" aria-live="polite">
-          {balance == null ? (
-            <span className="inline-block h-10 w-44 rounded-xl bg-white/10 animate-pulse align-middle" aria-label="Loading balance" />
-          ) : hidden ? (
-            <span className="tracking-[0.08em]" aria-label="Balance hidden">₦••••••</span>
-          ) : (
-            <CountUpNaira value={Number(balance.available)} />
-          )}
+        {balance == null && balanceFailed ? (
+          <div className="mt-1.5 flex items-center gap-3">
+            <p className="text-sm font-semibold text-white/80">Couldn&apos;t load the balance.</p>
+            <button
+              onClick={() => money.reload()}
+              className="shrink-0 h-11 px-3.5 rounded-full bg-white/10 text-[13px] font-bold text-white hover:bg-white/15 transition-colors"
+            >
+              Try again
+            </button>
+          </div>
+        ) : (
+          <p className="font-display text-[44px] leading-none font-extrabold text-volt-300 mt-1.5" aria-hidden>
+            {balance == null ? (
+              <span className="inline-block h-10 w-44 rounded-xl bg-white/10 animate-pulse align-middle" />
+            ) : hidden ? (
+              <span className="tracking-[0.08em]">₦••••••</span>
+            ) : (
+              <CountUpNaira value={Number(balance.available)} />
+            )}
+          </p>
+        )}
+        {/* What screen readers hear: the settled amount once, not every tick of the count-up. */}
+        <p className="sr-only" aria-live="polite" aria-atomic="true">
+          {balanceFailed && balance == null
+            ? ''
+            : balance == null
+              ? 'Loading balance'
+              : hidden
+                ? 'Balance hidden'
+                : `${formatCurrency(Number(balance.available))} in the account`}
         </p>
         {updatedAt && (
           <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/55">
@@ -758,7 +784,7 @@ export function AccountDetailsSheet({
       <div className="grid grid-cols-2 gap-2 mt-3">
         <button
           onClick={() => openWhatsApp(shareText)}
-          className="h-12 flex items-center justify-center gap-2 text-sm font-bold text-white bg-[#25D366] rounded-xl hover:brightness-95 transition"
+          className="h-12 flex items-center justify-center gap-2 text-sm font-bold text-ink bg-[#25D366] rounded-xl hover:brightness-95 transition"
         >
           Share on WhatsApp
         </button>

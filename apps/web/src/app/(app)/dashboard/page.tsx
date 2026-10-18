@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import { SessionStatus, UserRole } from '@pitchaside/shared';
 import { Celebration } from '@/components/illustrations';
+import { ErrorView } from '@/components/error-view';
 import { NewSessionSheet } from '@/components/new-session-sheet';
 import { prettyTime } from '@/components/player-ui';
 import {
@@ -71,6 +72,8 @@ export default function Dashboard() {
   const [groups, setGroups] = useState<IGroupWithMembers[]>([]);
   const [sessions, setSessions] = useState<ISessionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  // Groups didn't load: say so, rather than greeting an organiser as if they had none.
+  const [failed, setFailed] = useState(false);
   const [showNewGame, setShowNewGame] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   // Several groups: the one picked in the switcher; until then, the one playing soonest.
@@ -85,15 +88,18 @@ export default function Dashboard() {
     if (user?.role === UserRole.SUPER_ADMIN) router.replace('/hq');
   }, [user, router]);
 
-  useEffect(() => {
+  const loadAll = () => {
+    setFailed(false);
+    setLoading(true);
     Promise.all([getGroups(), getSessions()])
       .then(([g, s]) => {
         setGroups(g);
         setSessions(s);
       })
-      .catch(() => {})
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
-  }, []);
+  };
+  useEffect(loadAll, []);
 
   // Default to the group whose game is soonest (a game still being settled counts as now).
   const soonest = useMemo(() => {
@@ -143,6 +149,20 @@ export default function Dashboard() {
           <div className="h-16 bg-gray-200 rounded-3xl" />
         </div>
       </div>
+    );
+  }
+
+  if (failed) {
+    return (
+      <ErrorView
+        fullScreen={false}
+        eyebrow="No signal"
+        title="Couldn’t load your groups"
+        message="Check your connection and try again. Your money and games are safe."
+        onRetry={loadAll}
+        homeHref="/groups"
+        homeLabel="Go to groups"
+      />
     );
   }
 
@@ -313,12 +333,11 @@ export default function Dashboard() {
 
       {/* Several groups: pick whose money and game to show */}
       {groups.length > 1 && (
-        <div className="-mx-4 px-4 mb-3 flex gap-2 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Groups">
+        <div className="-mx-4 px-4 mb-3 flex gap-2 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="Show group">
           {groups.map((g) => (
             <button
               key={g.id}
-              role="tab"
-              aria-selected={g.id === groupId}
+              aria-pressed={g.id === groupId}
               onClick={() => setPicked(g.id)}
               className={`shrink-0 h-11 px-4 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
                 g.id === groupId ? 'bg-ink text-volt-300' : 'bg-white border border-gray-200 text-ink hover:border-ink'
@@ -360,7 +379,7 @@ export default function Dashboard() {
                   className="flex items-center gap-4 bg-white rounded-2xl p-3 border border-gray-100 shadow-card hover:border-gray-300 transition-colors"
                 >
                   <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-gray-200 text-center">
-                    <div className="bg-kit-500 text-white text-[9px] font-extrabold uppercase tracking-wider py-0.5">
+                    <div className="bg-kit-500 text-ink text-[9px] font-extrabold uppercase tracking-wider py-0.5">
                       {d.toLocaleDateString('en-GB', { month: 'short' })}
                     </div>
                     <div className="font-display text-lg font-extrabold text-ink leading-7">{d.getDate()}</div>

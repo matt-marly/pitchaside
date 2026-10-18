@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { BallSpinner } from '@/components/skeleton';
 import { prettyTime } from '@/components/player-ui';
@@ -14,6 +15,15 @@ export function ComingUpRow({ game, onChange }: { game: UpcomingGame; onChange: 
   const time = prettyTime(game.kickoffTime);
   const full = isFull(game);
   const fresh = landed && landed === game.myStatus ? 'animate-stamp' : '';
+  // The "I'm in" button goes once you've answered; keep keyboard focus on the row.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const answered = useRef(game.myStatus);
+  useEffect(() => {
+    if (answered.current === game.myStatus) return;
+    answered.current = game.myStatus;
+    const active = document.activeElement;
+    if (!active || active === document.body) rowRef.current?.focus({ preventScroll: true });
+  }, [game.myStatus]);
 
   const spots = game.requireRsvp
     ? full
@@ -22,10 +32,13 @@ export function ComingUpRow({ game, onChange }: { game: UpcomingGame; onChange: 
     : null;
 
   return (
-    <div className="flex items-center gap-3 bg-white rounded-2xl p-2.5 pr-3 border border-gray-100 shadow-card">
+    <div ref={rowRef} tabIndex={-1} className="flex items-center gap-3 bg-white rounded-2xl p-2.5 pr-3 border border-gray-100 shadow-card outline-none">
+      <p className="sr-only" aria-live="polite">
+        {landed === 'in' ? `You’re in for ${shortDate(game.date)}.` : landed === 'waitlist' ? `You’re number ${game.waitlistPosition ?? ''} on the waitlist for ${shortDate(game.date)}.` : ''}
+      </p>
       <Link href={`/me/games/${game.id}`} className="flex flex-1 min-w-0 items-center gap-3 rounded-xl">
         <span className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-gray-200 text-center" aria-hidden>
-          <span className="block bg-kit-500 text-white text-[10px] font-extrabold uppercase tracking-wider py-0.5">
+          <span className="block bg-kit-500 text-ink text-[10px] font-extrabold uppercase tracking-wider py-0.5">
             {d.toLocaleDateString('en-GB', { month: 'short' })}
           </span>
           <span className="block font-display text-lg font-extrabold text-ink leading-7">{d.getDate()}</span>

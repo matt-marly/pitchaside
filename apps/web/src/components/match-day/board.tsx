@@ -69,6 +69,8 @@ export function MatchDayBoard({
   const [step, setStep] = useState<Step | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
+  // First load failed: offer a retry instead of an endless skeleton.
+  const [failed, setFailed] = useState(false);
   // Bumped when the whole lineup changes at once (balance, a new squad), so the Teams list re-sorts.
   const [settleKey, setSettleKey] = useState(0);
   const seq = useRef(0);
@@ -78,11 +80,12 @@ export function MatchDayBoard({
     () =>
       getLineup(sessionId)
         .then((l) => {
+          setFailed(false);
           setLineup(l);
           setSettleKey((k) => k + 1);
           setStep((s) => s ?? startStep(l));
         })
-        .catch(() => {}),
+        .catch(() => setFailed(true)),
     [sessionId],
   );
   useEffect(() => {
@@ -121,6 +124,19 @@ export function MatchDayBoard({
     if (window.scrollY > top) window.scrollTo({ top });
   }
 
+  if ((!lineup || !step) && failed) {
+    return (
+      <div className="rounded-2xl bg-white border border-gray-100 p-5 text-sm text-gray-600" role="alert">
+        <p>Couldn&apos;t load the teams. Check your connection and try again.</p>
+        <button
+          onClick={() => load()}
+          className="mt-3 min-h-11 px-4 rounded-xl bg-ink text-sm font-bold text-volt-300 hover:bg-pitch-900"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
   if (!lineup || !step) {
     return (
       <div className="space-y-3" aria-busy>

@@ -83,6 +83,7 @@ export function TicketBibs({ sessionId, onPicked }: { sessionId: string; onPicke
                     />
                   )}
                   {teamName(t, lineup.captains)}
+                  {hasCaptains && lineup.captains[t] && <span className="sr-only">, {TEAMS[t].name.toLowerCase()} bib</span>}
                   {mine && <span aria-hidden>✓</span>}
                 </button>
               );

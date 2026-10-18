@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
+import { ErrorView } from '@/components/error-view';
 import { Section } from '@/components/player-ui';
 import { ComingUpRow } from '@/components/player-home/coming-up-row';
 import { MatchdayTicket } from '@/components/player-home/matchday-ticket';
@@ -19,11 +20,36 @@ import { getPlayerHome, type PlayerHome } from '@/lib/player';
  */
 export default function PlayerHomePage() {
   const [home, setHome] = useState<PlayerHome | null>(null);
-  const load = useCallback(() => getPlayerHome().then(setHome).catch(() => {}), []);
+  // First load failed: say so instead of a skeleton that never ends.
+  const [failed, setFailed] = useState(false);
+  const load = useCallback(
+    () =>
+      getPlayerHome()
+        .then((h) => {
+          setHome(h);
+          setFailed(false);
+        })
+        .catch(() => setFailed(true)),
+    [],
+  );
 
   useEffect(() => {
     load();
   }, [load]);
+
+  if (!home && failed) {
+    return (
+      <ErrorView
+        fullScreen={false}
+        eyebrow="No signal"
+        title="Couldn’t load your games"
+        message="Check your connection and try again."
+        onRetry={load}
+        homeHref="/me/games"
+        homeLabel="See all games"
+      />
+    );
+  }
 
   if (!home) {
     return (
@@ -69,7 +95,7 @@ export default function PlayerHomePage() {
         )}
       </span>
       <span className={`text-sm font-bold ${totalOwed > 0 ? 'text-volt-300' : 'text-ink'}`}>
-        {totalOwed > 0 ? `${home.owed.length} item${home.owed.length === 1 ? '' : 's'} ›` : 'History ›'}
+        {totalOwed > 0 ? `${home.owed.length} item${home.owed.length === 1 ? '' : 's'}` : 'History'} <span aria-hidden>›</span>
       </span>
     </Link>
   );
@@ -99,7 +125,7 @@ export default function PlayerHomePage() {
             title="Also coming up"
             action={
               <Link href="/me/games" className="inline-flex min-h-11 items-center px-1 text-sm font-bold text-pitch-700 hover:text-ink">
-                All games ›
+                All games&nbsp;<span aria-hidden>›</span>
               </Link>
             }
           >
@@ -112,7 +138,7 @@ export default function PlayerHomePage() {
         ) : (
           next && (
             <Link href="/me/games" className="mt-3 flex min-h-11 items-center justify-center text-sm font-bold text-pitch-700 hover:text-ink">
-              All games ›
+              All games&nbsp;<span aria-hidden>›</span>
             </Link>
           )
         )}

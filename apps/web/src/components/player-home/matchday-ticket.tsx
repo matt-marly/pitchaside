@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { BallSpinner } from '@/components/skeleton';
@@ -45,6 +45,15 @@ export function MatchdayTicket({ game, onChange }: { game: UpcomingGame; onChang
   const [confirmOut, setConfirmOut] = useState(false);
   // TODO(api): `location` only comes back on GET /me/games/:id. Adding it to the /me game card would save this call.
   const [location, setLocation] = useState<string | null>(null);
+  // "I'm in" / "Can't make it" disappear once answered; keep keyboard focus on the ticket instead of losing it.
+  const yourPart = useRef<HTMLDivElement>(null);
+  const answered = useRef(game.myStatus);
+  useEffect(() => {
+    if (answered.current === game.myStatus) return;
+    answered.current = game.myStatus;
+    const active = document.activeElement;
+    if (!active || active === document.body) yourPart.current?.focus({ preventScroll: true });
+  }, [game.myStatus]);
 
   useEffect(() => {
     let live = true;
@@ -96,7 +105,9 @@ export function MatchdayTicket({ game, onChange }: { game: UpcomingGame; onChang
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
               </svg>
               <span className="truncate">{location}</span>
-              <span className="shrink-0 font-bold text-volt-300">Map ›</span>
+              <span className="shrink-0 font-bold text-volt-300">
+                Map <span aria-hidden>›</span>
+              </span>
             </a>
           )}
         </div>
@@ -109,7 +120,7 @@ export function MatchdayTicket({ game, onChange }: { game: UpcomingGame; onChang
           <Stamp kind={stamped} place={place} fresh={landed === stamped} />
         </div>
       )}
-      <div className="relative rounded-b-[28px] bg-chalk" style={notchTop}>
+      <div ref={yourPart} tabIndex={-1} className="relative rounded-b-[28px] bg-chalk outline-none" style={notchTop}>
         <div className="absolute left-4 right-4 top-0 border-t-2 border-dashed border-ink/25" aria-hidden />
         <p className="sr-only" aria-live="polite">
           {landed === 'in' ? `You’re in for ${date}.` : landed === 'waitlist' ? `You’re number ${place} on the waitlist for ${date}.` : ''}
@@ -199,7 +210,7 @@ export function MatchdayTicket({ game, onChange }: { game: UpcomingGame; onChang
                 href={`/me/games/${game.id}`}
                 className="mt-1 flex min-h-11 items-center justify-center text-sm font-bold text-pitch-700 hover:text-ink"
               >
-                See who’s playing ›
+                See who’s playing&nbsp;<span aria-hidden>›</span>
               </Link>
             </>
           )}

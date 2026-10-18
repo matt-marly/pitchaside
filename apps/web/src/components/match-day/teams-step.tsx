@@ -5,7 +5,7 @@ import { buzz } from '@/components/motion';
 import { BallSpinner } from '@/components/skeleton';
 import type { Lineup, TeamKey } from '@/lib/api';
 import type { LineupActions } from './board';
-import { Armband, PaidMark, Shirt, TEAMS, TEAM_KEYS, avgOf, pitchName, teamName, type SquadMember } from './kit';
+import { Armband, PaidMark, Shirt, TEAMS, TEAM_KEYS, avgOf, pitchName, teamName, teamWithBib, type SquadMember } from './kit';
 
 /** The side with the fewest players: where the next bib most likely goes. */
 function emptiest(l: Lineup): TeamKey {
@@ -73,10 +73,11 @@ export function TeamsStep({
     const name = pitchName(m);
     return (
       <li key={m.id}>
+        {/* Named by what's on screen (so voice control works); the bib and the rack hint are added for screen readers. */}
         <button
           onClick={() => tap(m)}
           aria-pressed={mine}
-          aria-label={`${name}, ${m.team ? teamName(m.team, lineup.captains) : 'no bib'}. ${mine ? `Tap to take off the ${TEAMS[selected].name.toLowerCase()} bib` : `Tap to put on ${teamName(selected, lineup.captains)}`}`}
+          aria-describedby="rack-hint"
           className={`w-full min-h-14 flex items-center gap-3 px-3 py-1.5 text-left rounded-2xl transition-colors active:scale-[0.99] ${
             mine ? 'bg-white shadow-card ring-1 ring-ink/25' : 'bg-white/60 hover:bg-white'
           }`}
@@ -92,6 +93,7 @@ export function TeamsStep({
             <span className="block text-[11px] text-gray-500 truncate">
               {m.nickname ? `${m.firstName} ${m.lastName}` : m.lastName}
             </span>
+            <span className="sr-only">, {m.team ? teamWithBib(m.team, lineup.captains) : 'no bib yet'}</span>
           </span>
           <PaidMark paid={m.paid} />
           {m.ovr != null && <span className="w-7 text-right text-xs font-extrabold text-gray-500 tabular-nums">{m.ovr}</span>}
@@ -153,7 +155,7 @@ export function TeamsStep({
           const avg = team ? avgOf(lineup.squad, team) : null;
           return (
             <section key={team ?? 'none'} aria-label={team ? teamName(team, lineup.captains) : 'No bib yet'}>
-              <h3 className="flex items-center gap-2 px-1 mb-1.5 text-xs font-bold text-gray-600">
+              <h2 className="flex items-center gap-2 px-1 mb-1.5 text-xs font-bold text-gray-600">
                 {team ? (
                   <>
                     <span className={`w-3 h-3 rounded-sm ${TEAMS[team].swatch}`} aria-hidden />
@@ -167,7 +169,7 @@ export function TeamsStep({
                     <span className="tabular-nums">{unpicked ? `${unpicked} left` : 'all done'}</span>
                   </>
                 )}
-              </h3>
+              </h2>
               <ul className="space-y-1.5">
                 {members.map(row)}
               </ul>
@@ -178,7 +180,7 @@ export function TeamsStep({
 
       {lineup.squad.some((m) => m.paid === 'unpaid') && (
         <p className="mt-3 px-1 flex items-center gap-1.5 text-[11px] text-gray-500">
-          <span className="w-2 h-2 rounded-full bg-kit-500" aria-hidden /> Hasn’t paid for this game
+          <span className="w-2 h-2 rounded-full bg-kit-600" aria-hidden /> Hasn’t paid for this game
         </p>
       )}
 
@@ -199,7 +201,7 @@ export function TeamsStep({
               </button>
             </div>
           ) : (
-            <p className="px-2 pt-0.5 pb-1.5 text-[11px] text-white/70 truncate">
+            <p id="rack-hint" className="px-2 pt-0.5 pb-1.5 text-[11px] text-white/70 truncate">
               Tap players to put on <span className="font-bold text-white">{teamName(selected, lineup.captains)}</span>. Tap again to take it off.
             </p>
           )}
@@ -212,7 +214,7 @@ export function TeamsStep({
                   key={t}
                   role="radio"
                   aria-checked={on}
-                  aria-label={`${teamName(t, lineup.captains)}, ${n} player${n === 1 ? '' : 's'}`}
+                  aria-label={`${teamWithBib(t, lineup.captains)}, ${n} player${n === 1 ? '' : 's'}`}
                   onClick={() => {
                     if (t !== selected) buzz(8);
                     setBib(t);

@@ -29,13 +29,14 @@ export function PlayerStrip({
       </div>
       <Link
         href="/me/profile"
-        aria-label={`Your card: overall ${ovr}${ratings.provisional ? ', new player' : ''}. Open it`}
         className="shrink-0 flex min-h-11 items-center gap-1.5 rounded-full bg-ink pl-1.5 pr-3 text-white hover:bg-pitch-900"
       >
         <span className="min-w-8 h-8 px-1.5 rounded-full bg-volt-400 text-ink font-display text-base font-extrabold tabular-nums flex items-center justify-center">
           {ovr}
-        </span>
+        </span>{' '}
         <span className="text-xs font-bold">{ratings.provisional ? 'New' : 'OVR'}</span>
+        {/* Read as "70 New, your player card": what's on screen first, so voice control can say it. */}
+        <span className="sr-only">, your player card</span>
         <span className="text-volt-300" aria-hidden>
           ›
         </span>

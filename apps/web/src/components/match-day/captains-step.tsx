@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { buzz } from '@/components/motion';
 import type { Lineup } from '@/lib/api';
 import type { LineupActions } from './board';
-import { Armband, Shirt, TEAM_KEYS, avgOf, pitchName, teamName } from './kit';
+import { Armband, Shirt, TEAMS, TEAM_KEYS, avgOf, pitchName, teamName } from './kit';
 
 /**
  * Step 2: one card per team; tap a name to give them the armband (one per team). The team then
@@ -59,9 +59,10 @@ export function CaptainsStep({
             <section key={t} className="rounded-3xl bg-white border border-gray-100 shadow-card overflow-hidden">
               <header className="flex items-center gap-2.5 px-4 py-3 bg-ink turf-stripes">
                 <Shirt team={t} label={members.length} className="w-9 h-9 shrink-0" onDark />
-                <h3 key={name} className={`flex-1 min-w-0 font-display text-lg font-extrabold text-white truncate ${anim('animate-flip-in')}`}>
+                <h2 key={name} className={`flex-1 min-w-0 font-display text-lg font-extrabold text-white truncate ${anim('animate-flip-in')}`}>
                   {name}
-                </h3>
+                  {lineup.captains[t] && <span className="sr-only">, {TEAMS[t].name.toLowerCase()} bib</span>}
+                </h2>
                 {avg != null && <span className="shrink-0 text-[11px] font-bold text-white/60">avg {avg}</span>}
               </header>
               {members.length === 0 ? (
@@ -72,9 +73,9 @@ export function CaptainsStep({
                   </button>
                 </p>
               ) : (
-                <ul role="radiogroup" aria-label={`Captain of ${name}`} className="p-1.5">
+                <div role="radiogroup" aria-label={`Captain of ${name}`} className="p-1.5">
                   {members.map((m) => (
-                    <li key={m.id}>
+                    <div key={m.id}>
                       <button
                         role="radio"
                         aria-checked={m.captain}
@@ -88,7 +89,7 @@ export function CaptainsStep({
                       >
                         <span
                           className={`w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                            m.captain ? 'border-ink bg-ink' : 'border-gray-300'
+                            m.captain ? 'border-ink bg-ink' : 'border-gray-500'
                           }`}
                           aria-hidden
                         >
@@ -98,11 +99,11 @@ export function CaptainsStep({
                           {pitchName(m)}
                         </span>
                         {m.captain && <Armband className={anim('animate-kit-on')} />}
-                        {m.ovr != null && <span className="w-7 text-right text-xs font-bold text-gray-500 tabular-nums">{m.ovr}</span>}
+                        {m.ovr != null && <span className="w-7 text-right text-xs font-bold text-gray-600 tabular-nums">{m.ovr}</span>}
                       </button>
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </section>
           );

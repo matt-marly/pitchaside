@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 interface ConfirmDialogProps {
@@ -8,6 +8,7 @@ interface ConfirmDialogProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   variant?: 'danger' | 'default';
   onConfirm: () => void;
   onCancel: () => void;
@@ -18,12 +19,26 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   variant = 'default',
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   const [mounted, setMounted] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const messageId = useId();
   useEffect(() => setMounted(true), []);
+
+  // Start on the safe choice, and hand focus back to whatever opened the dialog when it closes.
+  useEffect(() => {
+    if (!open || !mounted) return;
+    const opener = document.activeElement as HTMLElement | null;
+    cancelRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (opener && opener.isConnected && opener !== document.body) opener.focus({ preventScroll: true });
+    };
+  }, [open, mounted]);
 
   useEffect(() => {
     if (!open) return;
@@ -48,6 +63,8 @@ export function ConfirmDialog({
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={messageId}
       className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-ink/50 backdrop-blur-sm px-0 sm:px-4"
       onClick={onCancel}
     >
@@ -66,21 +83,22 @@ export function ConfirmDialog({
             </svg>
           )}
         </div>
-        <h3 className="text-lg font-bold text-ink mb-1">{title}</h3>
-        <p className="text-sm text-gray-500 mb-5">{message}</p>
+        <h3 id={titleId} className="text-lg font-bold text-ink mb-1">{title}</h3>
+        <p id={messageId} className="text-sm text-gray-600 mb-5">{message}</p>
         <div className="flex gap-3">
           <button
+            ref={cancelRef}
             onClick={onCancel}
-            className="flex-1 py-3 text-sm font-bold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            className="flex-1 min-h-12 py-3 text-sm font-bold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
-            className={`flex-1 py-3 text-sm font-bold text-white rounded-xl transition-colors ${
+            className={`flex-1 min-h-12 py-3 text-sm font-bold rounded-xl transition-colors ${
               variant === 'danger'
-                ? 'bg-kit-500 hover:bg-kit-600'
-                : 'bg-ink hover:bg-pitch-900 !text-volt-300'
+                ? 'bg-kit-500 text-ink hover:bg-kit-400'
+                : 'bg-ink text-volt-300 hover:bg-pitch-900'
             }`}
           >
             {confirmLabel}

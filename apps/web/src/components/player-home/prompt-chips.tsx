@@ -28,7 +28,19 @@ function remember(key: string) {
 }
 
 /** One-line prompt with an action and a ×. */
-function Chip({ icon, children, action, onDismiss }: { icon: ReactNode; children: ReactNode; action?: ReactNode; onDismiss: () => void }) {
+function Chip({
+  icon,
+  children,
+  action,
+  onDismiss,
+  dismissLabel,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+  action?: ReactNode;
+  onDismiss: () => void;
+  dismissLabel: string;
+}) {
   return (
     <div className="flex items-center gap-2.5 rounded-full bg-white border border-gray-200 shadow-card pl-2 pr-1 min-h-[52px]">
       <span className="w-9 h-9 rounded-full bg-chalk text-ink flex items-center justify-center shrink-0" aria-hidden>
@@ -36,7 +48,7 @@ function Chip({ icon, children, action, onDismiss }: { icon: ReactNode; children
       </span>
       <p className="flex-1 min-w-0 text-[13px] font-semibold text-ink leading-tight">{children}</p>
       {action}
-      <button onClick={onDismiss} className="w-11 h-11 shrink-0 rounded-full text-gray-500 hover:text-ink text-xl leading-none" aria-label="Hide for a week">
+      <button onClick={onDismiss} className="w-11 h-11 shrink-0 rounded-full text-gray-500 hover:text-ink text-xl leading-none" aria-label={dismissLabel}>
         ×
       </button>
     </div>
@@ -75,6 +87,7 @@ export function PushChip() {
         <Chip
           icon={bell}
           onDismiss={dismiss}
+          dismissLabel="Hide the notifications tip for a week"
           action={
             <button onClick={() => setHelp(true)} className="min-h-11 px-3 rounded-full text-[13px] font-bold text-pitch-700 hover:text-ink shrink-0">
               How to allow
@@ -107,6 +120,7 @@ export function PushChip() {
     <Chip
       icon={bell}
       onDismiss={dismiss}
+      dismissLabel="Hide the notifications tip for a week"
       action={
         <button
           disabled={busy}
@@ -166,6 +180,7 @@ export function InstallChip() {
         remember(INSTALL_KEY);
         setShown(false);
       }}
+      dismissLabel="Hide the home screen tip for 3 days"
       action={
         deferred ? (
           <button

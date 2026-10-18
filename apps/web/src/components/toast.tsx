@@ -36,10 +36,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ success, error }}>
       {children}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[80] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4">
+      <div aria-live="polite" className="fixed top-4 left-1/2 -translate-x-1/2 z-[80] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4">
         {toasts.map((toast) => (
           <div
             key={toast.id}
+            role={toast.variant === 'error' ? 'alert' : 'status'}
             className={`pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl text-sm font-semibold shadow-lift animate-slide-down ${
               toast.variant === 'success'
                 ? 'bg-ink text-white ring-1 ring-volt-400/30'
@@ -58,7 +59,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <span className="flex-1">{toast.message}</span>
             <button
               onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
-              className="ml-1 text-white/60 hover:text-white transition-colors shrink-0"
+              aria-label="Dismiss"
+              className="ml-1 -mr-2 w-9 h-9 flex items-center justify-center text-white/60 hover:text-white transition-colors shrink-0"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />

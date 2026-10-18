@@ -8,7 +8,7 @@ import { Trophy } from '@/components/illustrations';
 import { useToast } from '@/components/toast';
 import type { Lineup, MatchGame, TeamKey } from '@/lib/api';
 import type { LineupActions } from './board';
-import { Shirt, TEAMS, TEAM_KEYS, teamName } from './kit';
+import { Shirt, TEAMS, TEAM_KEYS, teamName, teamWithBib } from './kit';
 
 type Draft = { teamA: TeamKey; teamB: TeamKey; scoreA: number; scoreB: number };
 
@@ -33,10 +33,14 @@ function nextPair(games: Pick<MatchGame, 'teamA' | 'teamB' | 'scoreA' | 'scoreB'
 function Goals({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
   return (
     <div className="flex flex-col items-center gap-2">
-      <span className="h-16 flex items-center overflow-hidden" aria-live="polite" aria-label={`${label}: ${value}`}>
+      <span className="h-16 flex items-center overflow-hidden" aria-hidden>
         <span key={value} className="font-display text-6xl font-extrabold text-white tabular-nums leading-none animate-flip-in">
           {value}
         </span>
+      </span>
+      {/* Says the new score after each tap; the flipping digit itself stays out of the way. */}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {label} {value}
       </span>
       <div className="flex items-center gap-2">
         <button
@@ -80,7 +84,7 @@ function TeamChoice({
   return (
     <fieldset>
       <legend className="text-xs font-bold text-gray-600 mb-1.5">{legend}</legend>
-      <div className="flex flex-wrap gap-1.5" role="radiogroup">
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={legend}>
         {teams.map((t) => {
           const on = value === t;
           return (
@@ -96,6 +100,7 @@ function TeamChoice({
             >
               <Shirt team={t} className="w-7 h-7" onDark={on} />
               <span className="max-w-[9rem] truncate">{teamName(t, captains)}</span>
+              {captains[t] && <span className="sr-only">, {TEAMS[t].name.toLowerCase()} bib</span>}
             </button>
           );
         })}
@@ -136,19 +141,30 @@ function ResultSheet({ lineup, actions, onClose }: { lineup: Lineup; actions: Li
 
   return (
     <Sheet titleId="add-result" onClose={onClose} align="left">
-      <div className="flex items-baseline justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <h2 id="add-result" className="font-display text-xl font-extrabold text-ink">
           Add result
         </h2>
-        <span key={lineup.games.length} className="text-xs font-bold text-gray-500 tabular-nums animate-flip-in">
-          Result {lineup.games.length + 1}
+        <span className="flex items-center gap-1">
+          <span key={lineup.games.length} className="text-xs font-bold text-gray-600 tabular-nums animate-flip-in">
+            Result {lineup.games.length + 1}
+          </span>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-11 h-11 -mr-2 shrink-0 flex items-center justify-center rounded-full text-gray-500 hover:bg-chalk hover:text-ink"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
         </span>
       </div>
 
       <div className="space-y-3">
         <TeamChoice legend="Home" teams={teams} captains={lineup.captains} value={draft.teamA} other={draft.teamB} onChange={(t) => setDraft({ ...draft, teamA: t })} />
         <TeamChoice legend="Away" teams={teams} captains={lineup.captains} value={draft.teamB} other={draft.teamA} onChange={(t) => setDraft({ ...draft, teamB: t })} />
-        {suggested && <p className="text-[11px] text-gray-500">Picked for you: winner stays on, longest-waiting team comes on.</p>}
+        {suggested && <p className="text-[11px] text-gray-600">Picked for you: winner stays on, longest-waiting team comes on.</p>}
       </div>
 
       {/* The scorebug */}
@@ -235,50 +251,51 @@ export function ResultsStep({ lineup, actions, matchDay }: { lineup: Lineup; act
 
       {/* Today's table */}
       {played && (
-        <section className="rounded-3xl bg-white border border-gray-100 shadow-card overflow-hidden mb-5" aria-label="Today's table">
-          <div className="grid grid-cols-[1fr_repeat(4,22px)_30px_30px] gap-1 px-3 py-2 bg-chalk text-[11px] font-bold text-gray-500">
-            <span>Today</span>
-            <span className="text-center">P</span>
-            <span className="text-center">W</span>
-            <span className="text-center">D</span>
-            <span className="text-center">L</span>
-            <span className="text-center">GD</span>
-            <span className="text-right">Pts</span>
+        <div className="rounded-3xl bg-white border border-gray-100 shadow-card overflow-hidden mb-5" role="table" aria-label="Today's table">
+          <div role="row" className="grid grid-cols-[1fr_repeat(4,22px)_30px_30px] gap-1 px-3 py-2 bg-chalk text-[11px] font-bold text-gray-600">
+            <span role="columnheader">Today</span>
+            <span role="columnheader" aria-label="Played" className="text-center">P</span>
+            <span role="columnheader" aria-label="Won" className="text-center">W</span>
+            <span role="columnheader" aria-label="Drawn" className="text-center">D</span>
+            <span role="columnheader" aria-label="Lost" className="text-center">L</span>
+            <span role="columnheader" aria-label="Goal difference" className="text-center">GD</span>
+            <span role="columnheader" aria-label="Points" className="text-right">Pts</span>
           </div>
           {lineup.standings.map((r) => {
             const gd = r.gf - r.ga;
             return (
               <div
                 key={r.team}
+                role="row"
                 className={`grid grid-cols-[1fr_repeat(4,22px)_30px_30px] gap-1 items-center px-3 min-h-12 border-t border-gray-100 text-sm ${
                   lineup.teamOfTheDay === r.team ? 'bg-volt-100' : ''
                 }`}
               >
-                <span className="flex items-center gap-2 min-w-0 font-bold text-ink">
+                <span role="rowheader" className="flex items-center gap-2 min-w-0 font-bold text-ink">
                   <Shirt team={r.team} className="w-6 h-6 shrink-0" />
                   <span className="truncate">{teamName(r.team, lineup.captains)}</span>
                 </span>
                 {[r.p, r.w, r.d, r.l].map((v, i) => (
-                  <span key={i} className="text-center text-gray-600 tabular-nums">
+                  <span key={i} role="cell" className="text-center text-gray-600 tabular-nums">
                     <span key={v} className={flipCls}>{v}</span>
                   </span>
                 ))}
-                <span className="text-center text-gray-600 tabular-nums">{gd > 0 ? `+${gd}` : gd}</span>
-                <span className="text-right font-display text-base font-extrabold text-ink tabular-nums">
+                <span role="cell" className="text-center text-gray-600 tabular-nums">{gd > 0 ? `+${gd}` : gd}</span>
+                <span role="cell" className="text-right font-display text-base font-extrabold text-ink tabular-nums">
                   <span key={r.pts} className={flipCls}>{r.pts}</span>
                 </span>
               </div>
             );
           })}
-        </section>
+        </div>
       )}
 
       {/* Results */}
       {played ? (
         <section aria-label="Results">
-          <h3 className="px-1 mb-1.5 text-xs font-bold text-gray-600">
+          <h2 className="px-1 mb-1.5 text-xs font-bold text-gray-600">
             <span className="tabular-nums">{lineup.games.length}</span> result{lineup.games.length === 1 ? '' : 's'}
-          </h3>
+          </h2>
           <ol className="space-y-1.5">
             {lineup.games.map((g, i) => (
               <li
@@ -287,7 +304,8 @@ export function ResultsStep({ lineup, actions, matchDay }: { lineup: Lineup; act
               >
                 <span className="text-[11px] font-bold text-gray-500 w-4 tabular-nums">{i + 1}</span>
                 <span className="flex-1 min-w-0 flex items-center justify-end gap-1.5 text-sm font-bold text-ink">
-                  <span className="truncate">{teamName(g.teamA, lineup.captains)}</span>
+                  {/* "Team" dropped here, as on the bib rack, so captains' names fit beside the score. */}
+                  <span className="truncate">{teamName(g.teamA, lineup.captains).replace(/^Team /, '')}</span>
                   <Shirt team={g.teamA} className="w-6 h-6 shrink-0" />
                 </span>
                 <span className="font-display text-lg font-extrabold text-ink tabular-nums px-1 shrink-0">
@@ -295,13 +313,13 @@ export function ResultsStep({ lineup, actions, matchDay }: { lineup: Lineup; act
                 </span>
                 <span className="flex-1 min-w-0 flex items-center gap-1.5 text-sm font-bold text-ink">
                   <Shirt team={g.teamB} className="w-6 h-6 shrink-0" />
-                  <span className="truncate">{teamName(g.teamB, lineup.captains)}</span>
+                  <span className="truncate">{teamName(g.teamB, lineup.captains).replace(/^Team /, '')}</span>
                 </span>
                 <button
                   onClick={() => actions.deleteGame(g.id)}
                   disabled={!!actions.busy}
                   className="w-11 h-11 shrink-0 flex items-center justify-center text-gray-500 hover:text-kit-600 rounded-xl"
-                  aria-label={`Delete result ${i + 1}`}
+                  aria-label={`Delete result ${i + 1}: ${teamWithBib(g.teamA, lineup.captains)} ${g.scoreA}, ${teamWithBib(g.teamB, lineup.captains)} ${g.scoreB}`}
                 >
                   {actions.busy === `del-${g.id}` ? (
                     <BallSpinner />
