@@ -750,16 +750,28 @@ function GameSection({
   const taken = rsvp?.requireRsvp ? rsvp.in.length : payments.length;
   const openSpots = Math.max(0, capacity - taken);
   const openAmount = Math.max(0, target - collected - owedAmount);
+  const upcoming = phase === 'before';
   const rows = [
-    { key: 'paid', dot: 'bg-volt-400', label: `${formatCurrency(collected)} paid by ${paid.length}`, href: `${gameHref}?tab=payments` },
+    {
+      key: 'paid',
+      dot: 'bg-volt-400',
+      label: paid.length ? `${formatCurrency(collected)} paid by ${paid.length}` : 'Nobody has paid yet',
+      href: `${gameHref}?tab=payments`,
+    },
+    // Before the game it's simply due; once it's been played, it's owed.
     owing.length
-      ? { key: 'owed', dot: 'bg-sun-400', label: `${formatCurrency(owedAmount)} still owed by ${owing.length}`, href: `${gameHref}?tab=payments` }
+      ? {
+          key: 'owed',
+          dot: 'bg-sun-400',
+          label: upcoming ? `${formatCurrency(owedAmount)} due from ${owing.length}` : `${formatCurrency(owedAmount)} still owed by ${owing.length}`,
+          href: `${gameHref}?tab=payments`,
+        }
       : null,
     openSpots > 0
       ? {
           key: 'open',
           dot: 'bg-white/25',
-          label: `${openSpots} spot${openSpots === 1 ? '' : 's'} open${openAmount > 0 ? ` (${formatCurrency(openAmount)})` : ''}`,
+          label: `${openSpots} spot${openSpots === 1 ? '' : 's'} free${openAmount > 0 ? ` · ${formatCurrency(openAmount)} if filled` : ''}`,
           href: `${gameHref}?tab=teams`,
         }
       : null,
@@ -792,12 +804,16 @@ function GameSection({
       {!open && (
         <FoldedSummary
           onExpand={onToggle}
-          value={coveredByDues ? `${paid.length}/${payments.length}` : formatCurrency(collected)}
+          value={
+            coveredByDues ? `${paid.length}/${payments.length}` : upcoming && capacity > 0 ? `${taken} of ${capacity} in` : formatCurrency(collected)
+          }
           valueTone="text-white"
           caption={
             coveredByDues
               ? 'paid their dues'
-              : `collected · ${formatCurrency(owedAmount)} still owed${openSpots ? ` · ${openSpots} spots open` : ''}`
+              : upcoming
+                ? `${formatCurrency(collected)} collected${owedAmount ? ` · ${formatCurrency(owedAmount)} due` : ''}${openSpots ? ` · ${openSpots} spots free` : ''}`
+                : `collected · ${formatCurrency(owedAmount)} still owed${openSpots ? ` · ${openSpots} spots free` : ''}`
           }
           action={null}
         />
@@ -812,6 +828,11 @@ function GameSection({
             <span className="font-display text-[28px] font-extrabold tabular-nums leading-none">{paid.length}</span>
             <span className="text-sm text-white/70 tabular-nums">of {payments.length} paid their dues</span>
           </>
+        ) : upcoming && capacity > 0 ? (
+          <>
+            <CountUp value={taken} className="font-display text-[28px] font-extrabold leading-none" />
+            <span className="text-sm text-white/70 tabular-nums">of {capacity} in · {formatCurrency(collected)} collected</span>
+          </>
         ) : (
           <>
             <CountUpNaira value={collected} className="font-display text-[28px] font-extrabold leading-none" />
@@ -825,7 +846,7 @@ function GameSection({
         aria-label={
           coveredByDues
             ? `${paid.length} of ${payments.length} paid their dues`
-            : `${formatCurrency(collected)} paid, ${formatCurrency(owedAmount)} still owed, ${formatCurrency(openAmount)} in open spots`
+            : `${formatCurrency(collected)} paid, ${formatCurrency(owedAmount)} ${upcoming ? 'due' : 'still owed'}, ${formatCurrency(openAmount)} more if the free spots fill`
         }
       >
         {coveredByDues ? (
@@ -942,7 +963,7 @@ function PrimaryAction({
       <button onClick={onRemind} disabled={reminding} className={primaryCls}>
         <Shine />
         <BellIcon />
-        {reminding ? 'Sending reminders…' : `Remind ${owing} unpaid`}
+        {reminding ? 'Sending reminders…' : `Remind ${owing} to pay`}
       </button>
     );
   }
