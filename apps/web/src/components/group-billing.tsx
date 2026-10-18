@@ -632,6 +632,7 @@ export function TransfersPanel({
   mockMode,
   onRefresh,
   focusId,
+  credits = {},
 }: {
   groupId: string;
   fee: number;
@@ -641,6 +642,8 @@ export function TransfersPanel({
   onRefresh: () => Promise<void>;
   /** A transfer to open and scroll to, e.g. one tapped in the transfer record. */
   focusId?: string | null;
+  /** Each member's unused credit by player id, so the match preview can say where the money ends up. */
+  credits?: Record<string, number>;
 }) {
   const toast = useToast();
   const [workingId, setWorkingId] = useState<string | null>(null);
@@ -676,6 +679,7 @@ export function TransfersPanel({
         .filter((p) => p.status === 'pending')
         .map((p) => ({
           id: p.id,
+          playerId: p.playerId,
           name: p.player ? `${p.player.firstName} ${p.player.lastName}` : 'Player',
           nickname: p.player?.nickname ?? null,
           what: s.label ?? new Date(s.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
@@ -684,6 +688,7 @@ export function TransfersPanel({
         })),
     );
   const [matching, setMatching] = useState<BankTransfer | null>(null);
+  const [ignoring, setIgnoring] = useState<BankTransfer | null>(null);
 
   async function run(id: string, fn: () => Promise<unknown>, ok: string) {
     setWorkingId(id);
@@ -752,6 +757,7 @@ export function TransfersPanel({
         <MatchPlayerSheet
           transfer={matching}
           options={pendingOptions}
+          credits={credits}
           busy={workingId === matching.id}
           onClose={() => setMatching(null)}
           onMatch={async (option) => {
@@ -761,6 +767,19 @@ export function TransfersPanel({
           }}
         />
       )}
+      <ConfirmDialog
+        open={!!ignoring}
+        title={`Ignore this ${ignoring ? formatCurrency(Number(ignoring.amount)) : ''} transfer?`}
+        message="It won't pay anyone's due and it's left out of the Money in totals. Only do this for money that isn't from a player, like a refund to you. It can't be undone in the app yet."
+        confirmLabel="Ignore transfer"
+        variant="danger"
+        onConfirm={() => {
+          const t = ignoring;
+          setIgnoring(null);
+          if (t) run(t.id, () => ignoreTransfer(t.id), 'Transfer ignored');
+        }}
+        onCancel={() => setIgnoring(null)}
+      />
       {mockMode && (
         <form onSubmit={handleSimulate} className="bg-sky-300/30 border-2 border-dashed border-sky-300 rounded-3xl p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -819,7 +838,7 @@ export function TransfersPanel({
       )}
 
       <div className="bg-white rounded-3xl border border-gray-100 shadow-card p-4">
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-gray-500">Transfer history</p>
             <p className="font-display text-2xl font-extrabold text-ink tabular-nums mt-1">{formatCurrency(received)}</p>
@@ -831,7 +850,7 @@ export function TransfersPanel({
             onClick={() => setShowRecord(!showRecord)}
             className="px-3 py-2 text-xs font-bold text-ink bg-white border border-gray-200 rounded-xl hover:border-ink transition-colors whitespace-nowrap"
           >
-            {showRecord ? 'Close' : '+ Record a transfer'}
+            {showRecord ? 'Close' : '+ Record a missed transfer'}
           </button>
         </div>
         {transfers.length > 0 && (
@@ -951,7 +970,7 @@ export function TransfersPanel({
                         </button>
                         <button
                           disabled={workingId === t.id}
-                          onClick={() => run(t.id, () => ignoreTransfer(t.id), 'Transfer ignored')}
+                          onClick={() => setIgnoring(t)}
                           className="px-4 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:border-ink disabled:opacity-40 transition-colors"
                         >
                           Ignore
@@ -972,6 +991,7 @@ export function TransfersPanel({
 interface PendingOption {
   /** The payment (a player's due for one game or period) the transfer would pay. */
   id: string;
+  playerId: string;
   name: string;
   nickname: string | null;
   what: string;
@@ -994,16 +1014,44 @@ function likelyReasons(t: BankTransfer, o: PendingOption) {
   return reasons;
 }
 
+/**
+ * What matching does, worked out the same way as assignTransfer + applyCredit on the server: the
+ * whole transfer goes to the chosen player. If it covers the picked due, that's paid and the rest
+ * joins their credit; their credit then pays their other dues, oldest first, while it covers a whole
+ * one. A preview only (it sees the games this page has loaded); the server does the real thing.
+ */
+function matchOutcome(t: BankTransfer, o: PendingOption, options: PendingOption[], credit: number) {
+  const amount = Number(t.amount);
+  const theirs = options.filter((x) => x.playerId === o.playerId).sort((a, b) => a.date.localeCompare(b.date));
+  const paid: PendingOption[] = [];
+  let pool = credit;
+  if (amount + 0.001 >= o.amount) {
+    paid.push(o);
+    pool += amount - o.amount;
+  } else {
+    pool += amount;
+  }
+  for (const x of theirs) {
+    if (paid.includes(x)) continue;
+    if (pool + 0.001 < x.amount) break;
+    pool -= x.amount;
+    paid.push(x);
+  }
+  return { paid, credit: Math.max(0, Math.round(pool * 100) / 100) };
+}
+
 /** Picking whose due an unknown transfer pays: likely payers first, then everyone who owes, with search. */
 function MatchPlayerSheet({
   transfer,
   options,
+  credits,
   busy,
   onClose,
   onMatch,
 }: {
   transfer: BankTransfer;
   options: PendingOption[];
+  credits: Record<string, number>;
   busy: boolean;
   onClose: () => void;
   onMatch: (o: PendingOption) => void;
@@ -1025,6 +1073,8 @@ function MatchPlayerSheet({
   const likely = ranked.filter((r) => r.reasons.length);
   const rest = ranked.filter((r) => !r.reasons.length);
   const choice = options.find((o) => o.id === picked) ?? null;
+  const outcome = choice ? matchOutcome(transfer, choice, options, credits[choice.playerId] ?? 0) : null;
+  const first = choice?.name.split(' ')[0];
   const from = transfer.senderName || 'an unknown sender';
 
   const list = (title: string, rows: typeof ranked) =>
@@ -1085,19 +1135,33 @@ function MatchPlayerSheet({
       onClose={onClose}
       align="left"
       footer={
-        <button
-          disabled={!choice || busy}
-          onClick={() => choice && onMatch(choice)}
-          className="w-full h-12 rounded-2xl bg-ink text-volt-300 text-[15px] font-extrabold hover:bg-pitch-900 disabled:opacity-40 transition-colors"
-        >
-          {choice ? `Match to ${choice.name}` : 'Pick who sent it'}
-        </button>
+        <div>
+          {choice && outcome && (
+            <div className="mb-3 rounded-2xl bg-chalk px-3.5 py-2.5 text-[13px] text-ink" aria-live="polite">
+              <p className="font-bold">All {formatCurrency(Number(transfer.amount))} goes to {choice.name}</p>
+              <p className="text-gray-700 mt-0.5">
+                {outcome.paid.length ? `Pays ${outcome.paid.map((x) => x.what).join(', ')}` : `Not enough for a full due yet`}
+                {outcome.credit > 0 ? ` · ${formatCurrency(outcome.credit)} kept as ${first}'s credit` : ''}
+              </p>
+              {Number(transfer.amount) >= choice.amount * 2 && (
+                <p className="mt-1 text-[12px] text-amber-800">Paying for a friend too? The app can&apos;t split one transfer yet, so it all counts for {first}.</p>
+              )}
+            </div>
+          )}
+          <button
+            disabled={!choice || busy}
+            onClick={() => choice && onMatch(choice)}
+            className="w-full h-12 rounded-2xl bg-ink text-volt-300 text-[15px] font-extrabold hover:bg-pitch-900 disabled:opacity-40 transition-colors"
+          >
+            {choice ? `Match to ${choice.name}` : 'Pick who sent it'}
+          </button>
+        </div>
       }
     >
       <SheetTitle
         id={titleId}
         title={`Who sent ${formatCurrency(Number(transfer.amount))}?`}
-        sub={`From ${from}${transfer.narration ? ` · “${transfer.narration}”` : ''}. It pays the due you pick.`}
+        sub={`From ${from}${transfer.narration ? ` · “${transfer.narration}”` : ''}. The whole amount goes to the player you pick.`}
         onClose={onClose}
       />
       {options.length > 6 && (

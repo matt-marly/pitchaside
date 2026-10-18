@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { formatCurrency, type ISessionWithDetails } from '@/lib/api';
 import { daysFromToday, gameDay, gameMoney } from '@/components/money-card';
 import { stagger } from '@/components/motion';
+import { prettyTime } from '@/components/player-ui';
 
 type Tone = 'live' | 'warn' | 'calm' | 'done' | 'off';
 const toneCls: Record<Tone, string> = {
@@ -29,7 +30,7 @@ export function gameChip(s: ISessionWithDetails): { text: string; tone: Tone } {
   return { text: days === 1 ? 'Tomorrow' : `In ${days} days`, tone: 'calm' };
 }
 
-function GameRow({ s, targetPlayers, i }: { s: ISessionWithDetails; targetPlayers: number; i: number }) {
+function GameRow({ s, targetPlayers, kickoff, i }: { s: ISessionWithDetails; targetPlayers: number; kickoff?: string | null; i: number }) {
   const chip = gameChip(s);
   const { payments, paid, owing } = gameMoney(s);
   const collected = Number(s.collectedAmount);
@@ -39,6 +40,7 @@ function GameRow({ s, targetPlayers, i }: { s: ISessionWithDetails; targetPlayer
   const scale = s.kind === 'dues' || played ? collected + owed : Number(s.targetAmount);
   const pct = scale > 0 ? Math.min(100, Math.round((collected / scale) * 100)) : 0;
   const owedPct = scale > 0 ? Math.min(100 - pct, (owed / scale) * 100) : 0;
+  const time = s.kind === 'dues' ? null : prettyTime(s.kickoffTime || kickoff);
   const title =
     s.kind === 'dues' && s.label
       ? `${s.label} dues`
@@ -47,9 +49,11 @@ function GameRow({ s, targetPlayers, i }: { s: ISessionWithDetails; targetPlayer
     s.kind === 'dues'
       ? `${paid.length} of ${payments.length} paid`
       : played
-        ? `${payments.length} played · ${owing.length ? `${owing.length} still owe` : 'all paid'}`
+        ? payments.length
+          ? `${payments.length} played · ${owing.length ? `${owing.length} still owe` : 'all paid'}`
+          : 'Nobody was in'
         : `${payments.length} of ${targetPlayers} in`;
-  const money = played || s.kind === 'dues' ? `${formatCurrency(collected)} of ${formatCurrency(collected + owed)}` : `${formatCurrency(collected)} of ${formatCurrency(Number(s.targetAmount))}`;
+  const money = `${formatCurrency(collected)} paid of ${formatCurrency(played || s.kind === 'dues' ? collected + owed : Number(s.targetAmount))}`;
 
   return (
     <li className="animate-rise" style={stagger(i, 40)}>
@@ -58,7 +62,10 @@ function GameRow({ s, targetPlayers, i }: { s: ISessionWithDetails; targetPlayer
         className="press block bg-white px-4 py-3.5 rounded-2xl border border-gray-100 shadow-card hover:border-gray-300 transition-colors"
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[15px] font-bold text-ink">{title}</p>
+          <p className="text-[15px] font-bold text-ink">
+            {title}
+            {time && <span className="font-semibold text-gray-600"> · {time}</span>}
+          </p>
           <span className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2.5 py-1 rounded-full whitespace-nowrap ${toneCls[chip.tone]}`}>
             {(chip.tone === 'live' || chip.tone === 'warn') && (
               <span className={`w-1.5 h-1.5 rounded-full animate-pulse-soft ${chip.tone === 'warn' ? 'bg-amber-600' : 'bg-pitch-600'}`} aria-hidden />
@@ -80,7 +87,15 @@ function GameRow({ s, targetPlayers, i }: { s: ISessionWithDetails; targetPlayer
 }
 
 /** Coming up (soonest first), then past games (newest first), each linking to the game page. */
-export function GamesList({ sessions, targetPlayers }: { sessions: ISessionWithDetails[]; targetPlayers: number }) {
+export function GamesList({
+  sessions,
+  targetPlayers,
+  kickoff,
+}: {
+  sessions: ISessionWithDetails[];
+  targetPlayers: number;
+  kickoff?: string | null;
+}) {
   const ahead = sessions
     .filter((s) => s.status === 'upcoming' && daysFromToday(s.date) >= 0)
     .sort((a, b) => gameDay(a.date).getTime() - gameDay(b.date).getTime());
@@ -102,7 +117,7 @@ export function GamesList({ sessions, targetPlayers }: { sessions: ISessionWithD
             </h3>
             <ul className="space-y-2">
               {g.list.map((s) => (
-                <GameRow key={s.id} s={s} targetPlayers={targetPlayers} i={n++} />
+                <GameRow key={s.id} s={s} targetPlayers={targetPlayers} kickoff={kickoff} i={n++} />
               ))}
             </ul>
           </section>

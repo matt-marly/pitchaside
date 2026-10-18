@@ -65,7 +65,7 @@ export function MemberSheet({
       v: due.state === 'paid' ? 'Paid' : due.state === 'waived' ? 'Waived' : due.state === 'owes' ? `Owes ${formatCurrency(due.amount)}` : 'Not in',
       tone: due.state === 'owes' ? 'text-amber-700' : due.state === 'paid' ? 'text-pitch-600' : 'text-gray-600',
     },
-    credit > 0 && { k: 'Credit', v: formatCurrency(credit), note: 'Paid in, not yet enough for a due' },
+    credit > 0 && { k: 'Credit', v: formatCurrency(credit), note: 'Pays their next due by itself once it covers a whole one' },
   ].filter(Boolean) as { k: string; v: string; tone?: string; note?: string }[];
 
   return (

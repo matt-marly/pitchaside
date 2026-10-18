@@ -12,7 +12,7 @@ import { JerseyBadge, kitFor } from '@/components/illustrations';
 import { GroupAccountCard, TransfersPanel } from '@/components/group-billing';
 import { PayoutsPanel } from '@/components/group-payouts';
 import { NewSessionSheet } from '@/components/new-session-sheet';
-import { frequencyLabel, frequencyOptions } from '@/lib/billing';
+import { frequencyOptions, frequencyShort } from '@/lib/billing';
 import { LeagueTableView } from '@/components/ratings';
 import { ContributionsVisibilityPicker } from '@/components/contributions-visibility';
 import { RsvpToggle } from '@/components/rsvp-toggle';
@@ -28,7 +28,7 @@ import { MemberSheet, type MemberDue } from '@/components/group/member-sheet';
 import { useAuth } from '@/lib/auth';
 import {
   getGroup,
-  getSessions,
+  getSessionsPaginated,
   getPlayers,
   addMember,
   addMeToGroup,
@@ -62,6 +62,10 @@ export default function GroupDetailPage() {
   const { user } = useAuth();
   const [group, setGroup] = useState<IGroupWithMembers | null>(null);
   const [sessions, setSessions] = useState<ISessionWithDetails[]>([]);
+  // The API sends the newest games first, 20 at a time (100 at most per call); "Show older games" asks for more.
+  const [gameLimit, setGameLimit] = useState(20);
+  const [gameTotal, setGameTotal] = useState(0);
+  const [loadingGames, setLoadingGames] = useState(false);
   const [allPlayers, setAllPlayers] = useState<IPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
@@ -77,7 +81,7 @@ export default function GroupDetailPage() {
   const [showAccount, setShowAccount] = useState(false);
   const [openMember, setOpenMember] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [memberFilter, setMemberFilter] = useState<'all' | 'owes' | 'paid'>('all');
+  const [memberFilter, setMemberFilter] = useState<'all' | 'owes' | 'paid' | 'out'>('all');
 
   // Add member state
   const [showAddMember, setShowAddMember] = useState(false);
@@ -114,10 +118,11 @@ export default function GroupDetailPage() {
   } | null>(null);
 
   useEffect(() => {
-    Promise.all([getGroup(id), getSessions(id), getPlayers()])
+    Promise.all([getGroup(id), getSessionsPaginated(1, 20, id), getPlayers()])
       .then(([g, s, p]) => {
         setGroup(g);
-        setSessions(s);
+        setSessions(s.data);
+        setGameTotal(s.meta.total);
         setAllPlayers(p);
       })
       .catch(() => router.push('/groups'))
@@ -126,8 +131,33 @@ export default function GroupDetailPage() {
   }, [id, router]);
 
   async function refreshPayments() {
-    const [s] = await Promise.all([getSessions(id), money.reload()]);
-    setSessions(s);
+    const [s] = await Promise.all([getSessionsPaginated(1, gameLimit, id), money.reload()]);
+    setSessions(s.data);
+    setGameTotal(s.meta.total);
+  }
+
+  async function showOlderGames() {
+    const limit = Math.min(100, gameLimit + 20);
+    setLoadingGames(true);
+    try {
+      const s = await getSessionsPaginated(1, limit, id);
+      setSessions(s.data);
+      setGameTotal(s.meta.total);
+      setGameLimit(limit);
+    } catch {
+      toast.error('Older games didn’t load. Try again.');
+    } finally {
+      setLoadingGames(false);
+    }
+  }
+
+  /** Switch section; if the tabs have been scrolled under the top, bring the new section's start into view. */
+  function openTab(t: Tab) {
+    setTab(t);
+    const bar = document.getElementById('group-tabs');
+    if (bar && bar.getBoundingClientRect().top <= 1) {
+      requestAnimationFrame(() => document.getElementById('group-tab-top')?.scrollIntoView({ block: 'start' }));
+    }
   }
 
   function startEdit() {
@@ -303,6 +333,9 @@ export default function GroupDetailPage() {
   const members = (group.memberships ?? []).map((m) => ({ ...m, due: dueOf(m.player.id) }));
   const paidCount = members.filter((m) => m.due?.state === 'paid').length;
   const owesCount = members.filter((m) => m.due?.state === 'owes').length;
+  const outCount = members.filter((m) => m.due?.state === 'out').length;
+  // Joined in the last two weeks: worth a glance (the exact date is in their card).
+  const isNew = (joinedAt: string) => Date.now() - new Date(joinedAt).getTime() < 14 * 86_400_000;
   const q = query.trim().toLowerCase();
   const shown = members
     .filter((m) => memberFilter === 'all' || m.due?.state === memberFilter)
@@ -320,7 +353,7 @@ export default function GroupDetailPage() {
   const meta = [
     group.location,
     group.schedule,
-    `${formatCurrency(group.feePerPlayer)} ${perGame ? 'a game' : frequencyLabel(group.paymentType).toLowerCase()}`,
+    `${formatCurrency(group.feePerPlayer)} per player ${frequencyShort(group.paymentType) || 'per game'}`,
   ].filter(Boolean);
 
   return (
@@ -500,76 +533,77 @@ export default function GroupDetailPage() {
         </div>
       )}
 
-      {/* The account: the home's card when there is one, the set-up card when there isn't yet */}
-      {!editing && billing && !billing.account && (
-        <GroupAccountCard
-          groupId={id}
-          groupName={group.name}
-          fee={Number(group.feePerPlayer)}
-          billing={billing}
-          balance={money.balance?.available ?? null}
-          onChange={money.setBilling}
-          onMatchTransfer={(transferId) => {
-            setFocusTransfer(transferId);
-            setTab('money');
-            setMoneyView('transfers');
-          }}
-        />
-      )}
-      {!editing && (!billing || billing.account) && (
-        <MoneyCard
-          group={group}
-          money={money}
-          gameFallback={null}
-          canManage={canManage}
-          showGame={false}
-          onScheduleGame={() => setShowCreateSession(true)}
-          onOpenAccount={() => setShowAccount(true)}
-        />
-      )}
-
-      {/* Bringing people in: the same sheet as Invite on the home */}
-      {!editing && billing?.account && (
-        <button
-          onClick={() => setShowInvite(true)}
-          className="press mt-3 w-full flex items-center gap-3 min-h-14 px-4 py-2.5 bg-white rounded-2xl border border-gray-100 shadow-card text-left hover:border-gray-300 transition-colors"
-        >
-          <span className="w-9 h-9 shrink-0 rounded-xl bg-volt-300 text-ink flex items-center justify-center">
-            <InviteIcon />
-          </span>
-          <span className="flex-1 min-w-0">
-            <span className="block text-[15px] font-bold text-ink">Invite players</span>
-            <span className="block text-xs text-gray-600 truncate">Share the group link or QR code</span>
-          </span>
-          <svg className="w-4 h-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-          </svg>
-        </button>
-      )}
-
-      {/* Tabs */}
-      <div role="tablist" aria-label={`${group.name} sections`} className="mt-5 flex p-1 bg-white border border-gray-200 rounded-2xl mb-4">
-        {tabs.map((t) => (
+      {/* The money in one line (the full account lives under Money), and Invite where it's easy to reach */}
+      {!editing && (
+        <div className="flex items-center gap-2">
           <button
-            key={t.key}
-            role="tab"
-            aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
-            className={`press relative flex-1 min-h-11 px-1 text-[13px] sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors ${
-              tab === t.key ? 'bg-ink text-volt-300' : 'text-gray-600 hover:text-ink'
-            }`}
+            onClick={() => {
+              setMoneyView('transfers');
+              openTab('money');
+              requestAnimationFrame(() => document.getElementById('group-tab-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            }}
+            className="press flex-1 min-w-0 flex items-center gap-2.5 min-h-12 pl-3.5 pr-2.5 rounded-2xl bg-ink text-white text-left hover:bg-pitch-900 transition-colors"
           >
-            {t.label}
-            {!!t.badge && (
-              <span
-                className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-kit-500 text-ink text-[10px] font-extrabold flex items-center justify-center"
-                aria-label={`${t.badge} to match`}
-              >
-                {t.badge}
-              </span>
-            )}
+            <span className="flex-1 min-w-0">
+              {billing && !billing.account ? (
+                <span className="block text-[13px] font-bold text-white truncate">No bank account yet · Set up</span>
+              ) : (
+                <span className="block text-[13px] font-semibold text-white/75 truncate">
+                  <span className="font-display text-[16px] font-extrabold text-volt-300 tabular-nums">
+                    {money.balance ? formatCurrency(Number(money.balance.available)) : '₦…'}
+                  </span>{' '}
+                  in the account
+                </span>
+              )}
+              {unmatched > 0 && (
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-sun-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sun-400 animate-pulse-soft" aria-hidden />
+                  {unmatched} payment{unmatched === 1 ? '' : 's'} to match
+                </span>
+              )}
+            </span>
+            <svg className="w-4 h-4 shrink-0 text-white/60" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
           </button>
-        ))}
+          {billing?.account && (
+            <button onClick={() => setShowInvite(true)} className={`${btnSecondary} !min-h-12 !px-3.5 !text-sm shrink-0`}>
+              <InviteIcon />
+              Invite
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Tabs: they stay at the top while a long list scrolls */}
+      <div id="group-tab-top" className="scroll-mt-0" />
+      <div
+        id="group-tabs"
+        className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-[max(8px,env(safe-area-inset-top))] pb-2 mt-3 mb-3 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
+      >
+        <div role="tablist" aria-label={`${group.name} sections`} className="flex p-1 bg-white border border-gray-200 rounded-2xl shadow-card">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => openTab(t.key)}
+              className={`press relative flex-1 min-h-11 px-1 text-[13px] sm:text-sm font-bold whitespace-nowrap rounded-xl transition-colors duration-200 ${
+                tab === t.key ? 'bg-ink text-volt-300' : 'text-gray-600 hover:text-ink'
+              }`}
+            >
+              {t.label}
+              {!!t.badge && (
+                <span
+                  className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-kit-500 text-ink text-[10px] font-extrabold flex items-center justify-center"
+                  aria-label={`${t.badge} to match`}
+                >
+                  {t.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === 'table' && (table ? <LeagueTableView table={table} /> : <div className="h-40 bg-gray-100 rounded-3xl animate-pulse" />)}
@@ -603,6 +637,31 @@ export default function GroupDetailPage() {
             ))}
           </div>
           {moneyView === 'transfers' ? (
+            <>
+            {/* The account: the home's card when there is one, the set-up card when there isn't yet */}
+            {billing && !billing.account ? (
+              <GroupAccountCard
+                groupId={id}
+                groupName={group.name}
+                fee={Number(group.feePerPlayer)}
+                billing={billing}
+                balance={money.balance?.available ?? null}
+                onChange={money.setBilling}
+                onMatchTransfer={(transferId) => setFocusTransfer(transferId)}
+              />
+            ) : (
+              <div className="mb-3">
+                <MoneyCard
+                  group={group}
+                  money={money}
+                  gameFallback={null}
+                  canManage={canManage}
+                  showGame={false}
+                  onScheduleGame={() => setShowCreateSession(true)}
+                  onOpenAccount={() => setShowAccount(true)}
+                />
+              </div>
+            )}
             <TransfersPanel
               groupId={id}
               fee={Number(group.feePerPlayer)}
@@ -611,7 +670,9 @@ export default function GroupDetailPage() {
               mockMode={billing?.providerMode === 'mock'}
               onRefresh={refreshPayments}
               focusId={focusTransfer}
+              credits={Object.fromEntries((group.memberships ?? []).map((m) => [m.player.id, Number(m.credit ?? 0)]))}
             />
+            </>
           ) : (
             <PayoutsPanel
               groupId={id}
@@ -653,17 +714,12 @@ export default function GroupDetailPage() {
             <div className="min-w-0">
               <p className="text-[15px] font-extrabold text-ink tabular-nums">
                 {memberCount} member{memberCount === 1 ? '' : 's'}
-                <span className="font-semibold text-gray-500"> · {group.targetPlayers} spots a game</span>
               </p>
-              {nextDue && (
-                <p className="text-xs text-gray-600 tabular-nums">
-                  {dueLabel}: {paidCount} paid · {owesCount} owe
-                </p>
-              )}
+              <p className="text-xs font-semibold text-gray-600 tabular-nums">{group.targetPlayers} spots a game</p>
             </div>
             <button onClick={() => setShowAddMember(!showAddMember)} aria-expanded={showAddMember} className={`${btnSecondary} !min-h-11 !px-3.5 !text-sm shrink-0`}>
               <PlusIcon />
-              Add
+              Add player
             </button>
           </div>
 
@@ -721,32 +777,46 @@ export default function GroupDetailPage() {
                 />
               )}
               {nextDue && (
-                <div className="mt-2.5 flex gap-2" role="radiogroup" aria-label="Show members">
-                  {(
-                    [
-                      { key: 'all', label: `All ${memberCount}` },
-                      { key: 'owes', label: `Owe ${owesCount}` },
-                      { key: 'paid', label: `Paid ${paidCount}` },
-                    ] as const
-                  ).map((f) => (
-                    <button
-                      key={f.key}
-                      role="radio"
-                      aria-checked={memberFilter === f.key}
-                      onClick={() => setMemberFilter(f.key)}
-                      className={`press min-h-9 px-3.5 rounded-full text-xs font-bold tabular-nums transition-colors ${
-                        memberFilter === f.key ? 'bg-ink text-volt-300' : 'bg-white border border-gray-200 text-gray-700 hover:border-ink'
-                      }`}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-600">
+                    {perGame ? 'Payments for' : 'Dues for'} {dueLabel}
+                  </p>
+                  <div className="mt-1.5 flex gap-2 overflow-x-auto -mx-4 px-4 [scrollbar-width:none]" role="radiogroup" aria-label={`Show members by payment for ${dueLabel}`}>
+                    {(
+                      [
+                        { key: 'all', label: `All ${memberCount}`, n: 1 },
+                        { key: 'owes', label: `Owe ${owesCount}`, n: 1 },
+                        { key: 'paid', label: `Paid ${paidCount}`, n: 1 },
+                        { key: 'out', label: `Not in ${outCount}`, n: outCount },
+                      ] as const
+                    )
+                      .filter((f) => f.n > 0)
+                      .map((f) => (
+                        <button
+                          key={f.key}
+                          role="radio"
+                          aria-checked={memberFilter === f.key}
+                          onClick={() => setMemberFilter(f.key)}
+                          className={`press shrink-0 min-h-9 px-3.5 rounded-full text-xs font-bold tabular-nums whitespace-nowrap transition-colors ${
+                            memberFilter === f.key ? 'bg-ink text-volt-300' : 'bg-white border border-gray-200 text-gray-700 hover:border-ink'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                  </div>
+                </>
               )}
 
               {shown.length === 0 ? (
                 <p className="mt-6 text-sm text-gray-600 text-center">
-                  {q ? `Nobody called “${query.trim()}”.` : memberFilter === 'owes' ? 'Nobody owes. Everyone in has paid.' : 'Nobody has paid yet.'}
+                  {q
+                    ? `Nobody called “${query.trim()}”.`
+                    : memberFilter === 'owes'
+                      ? 'Nobody owes. Everyone in has paid.'
+                      : memberFilter === 'out'
+                        ? `Everyone is in for ${dueLabel}.`
+                        : 'Nobody has paid yet.'}
                 </p>
               ) : (
                 <ul className="mt-3 bg-white rounded-2xl border border-gray-100 shadow-card divide-y divide-gray-100 overflow-hidden">
@@ -778,11 +848,15 @@ export default function GroupDetailPage() {
                               {name}
                               {m.player.nickname && <span className="font-semibold text-gray-500"> · {m.player.nickname}</span>}
                             </span>
-                            <span className="block text-xs text-gray-600 truncate">
-                              Joined {new Date(m.joinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                              {m.role !== 'player' && <span className="capitalize"> · {m.role}</span>}
-                              {credit > 0 && <span className="font-bold text-pitch-600"> · {formatCurrency(credit)} credit</span>}
-                            </span>
+                            {(isNew(m.joinedAt) || credit > 0 || m.role !== 'player') && (
+                              <span className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-600 min-w-0">
+                                {isNew(m.joinedAt) && (
+                                  <span className="shrink-0 px-1.5 py-px rounded-md bg-sky-300/40 text-[10px] font-extrabold uppercase tracking-wide text-ink">New</span>
+                                )}
+                                {m.role !== 'player' && <span className="capitalize truncate">{m.role}</span>}
+                                {credit > 0 && <span className="font-bold text-pitch-600 truncate">{formatCurrency(credit)} credit</span>}
+                              </span>
+                            )}
                           </span>
                           {pill && (
                             <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-extrabold tabular-nums whitespace-nowrap ${pill.cls}`}>{pill.text}</span>
@@ -811,7 +885,23 @@ export default function GroupDetailPage() {
           {sessions.length === 0 ? (
             <EmptyState icon="calendar" title="No games yet" description="Schedule one and everyone in the group gets a due for it." />
           ) : (
-            <GamesList sessions={sessions} targetPlayers={group.targetPlayers} />
+            <>
+              <GamesList sessions={sessions} targetPlayers={group.targetPlayers} kickoff={group.kickoffTime} />
+              {gameTotal > sessions.length &&
+                (gameLimit < 100 ? (
+                  <button onClick={showOlderGames} disabled={loadingGames} className={`${btnSecondary} w-full mt-4`}>
+                    {loadingGames ? 'Loading…' : `Show older games (${gameTotal - sessions.length} more)`}
+                  </button>
+                ) : (
+                  <p className="mt-4 text-center text-sm text-gray-600">
+                    Older games are on the{' '}
+                    <Link href="/sessions" className="font-bold text-pitch-600 hover:underline">
+                      Sessions page
+                    </Link>
+                    .
+                  </p>
+                ))}
+            </>
           )}
         </div>
       )}
