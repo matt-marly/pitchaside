@@ -3,10 +3,10 @@
 import { useId, useState } from 'react';
 import { Sheet } from '@/components/sheet';
 import { SheetTitle } from '@/components/home/sheet-title';
-import { kitFor } from '@/components/illustrations';
+import { Avatar } from '@/components/ratings';
 import { stagger } from '@/components/motion';
 
-export type GroupMember = { playerId: string; name: string };
+export type GroupMember = { playerId: string; name: string; nickname?: string | null; photoKey?: string | null };
 
 /**
  * Putting group members on a game by hand, for players who told the organiser rather than the
@@ -27,7 +27,8 @@ export function AddToGameSheet({
   const [busy, setBusy] = useState<string | null>(null);
   const [added, setAdded] = useState<Set<string>>(new Set());
   const q = query.trim().toLowerCase();
-  const shown = members.filter((m) => !q || m.name.toLowerCase().includes(q));
+  // Search by name or nickname: organisers often know players by the nickname.
+  const shown = members.filter((m) => !q || `${m.name} ${m.nickname ?? ''}`.toLowerCase().includes(q));
 
   async function add(m: GroupMember) {
     setBusy(m.playerId);
@@ -60,18 +61,22 @@ export function AddToGameSheet({
       ) : (
         <ul className="mt-2 rounded-3xl bg-white border border-gray-100 divide-y divide-gray-100 overflow-hidden">
           {shown.map((m, i) => {
-            const kit = kitFor(m.name);
             const isIn = added.has(m.playerId);
             return (
               <li key={m.playerId} className="animate-rise flex items-center gap-3 px-3.5 min-h-16 py-2.5" style={stagger(Math.min(i, 10), 25, 0)}>
-                <span className={`w-10 h-10 shrink-0 rounded-full ${kit.bg} ${kit.fg} flex items-center justify-center text-sm font-extrabold font-display`} aria-hidden>
-                  {m.name.charAt(0)}
+                <Avatar name={m.name} photoKey={m.photoKey} className="w-10 h-10 text-sm" />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[15px] font-bold text-ink truncate">{m.name}</span>
+                  {m.nickname && <span className="block text-[13px] text-gray-500 truncate">“{m.nickname}”</span>}
                 </span>
-                <span className="flex-1 min-w-0 text-[15px] font-bold text-ink truncate">{m.name}</span>
+                {/* Quiet until tapped: a list of loud buttons would all shout at once */}
                 <button
                   onClick={() => add(m)}
                   disabled={isIn || busy === m.playerId}
-                  className={`press shrink-0 h-9 px-3.5 rounded-xl text-[13px] font-bold ${isIn ? 'bg-volt-300 text-ink' : 'bg-ink text-volt-300 hover:bg-pitch-900'} disabled:cursor-default`}
+                  aria-label={isIn ? `${m.name} is in` : `Mark ${m.name} in`}
+                  className={`press shrink-0 min-h-11 px-4 rounded-full text-[13px] font-bold transition-colors disabled:cursor-default ${
+                    isIn ? 'bg-volt-300 text-ink animate-pop-in' : 'border border-gray-300 bg-white text-ink hover:border-ink'
+                  }`}
                 >
                   {isIn ? 'In ✓' : busy === m.playerId ? '…' : 'Mark in'}
                 </button>

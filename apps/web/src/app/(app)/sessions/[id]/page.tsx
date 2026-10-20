@@ -297,7 +297,12 @@ export default function GamePage() {
   const onGame = new Set(payments.map((p) => p.playerId));
   const notOnGame = members
     .filter((m) => !onGame.has(m.player.id))
-    .map((m) => ({ playerId: m.player.id, name: `${m.player.firstName} ${m.player.lastName}` }))
+    .map((m) => ({
+      playerId: m.player.id,
+      name: `${m.player.firstName} ${m.player.lastName}`,
+      nickname: m.player.nickname ?? null,
+      photoKey: m.player.photoKey ?? null,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
   // The player's other unpaid games in this group: where a payment by transfer could move to.
   const otherDues = (p: IPayment) => owed.filter((o) => o.playerId === p.playerId && o.sessionId !== session.id);
