@@ -32,7 +32,7 @@ export default function SignInPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const result = await login(form.email, form.password);
+      const result = await login(form.email.trim(), form.password);
       if (result.requires2FA) {
         setTwoFA({ required: true, userId: result.userId });
       } else {

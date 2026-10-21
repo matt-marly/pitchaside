@@ -6,6 +6,7 @@ import { Logo } from '@/components/brand';
 import { NightStadium } from '@/components/illustrations';
 import { PasswordSignIn } from '@/components/password-sign-in';
 import { SignInSwitch } from '@/components/signin-switch';
+import { http, storeRefreshToken } from '@/lib/http';
 
 export default function PlayerLoginPage() {
   const router = useRouter();
@@ -16,6 +17,23 @@ export default function PlayerLoginPage() {
 
   function onSignedIn() {
     router.replace('/me');
+  }
+
+  /** The same details as an organiser's: open the organiser side instead of failing. */
+  async function asOrganiser(email: string, password: string) {
+    try {
+      const res = await http.post<{ requires2FA?: boolean; refreshToken?: string }>('/auth/login', { email, password });
+      if (res.requires2FA) {
+        // Their code goes on the organiser sign-in.
+        router.replace(`/signin?email=${encodeURIComponent(email)}`);
+        return true;
+      }
+      storeRefreshToken(res.refreshToken);
+      window.location.assign('/dashboard');
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   return (
@@ -39,6 +57,7 @@ export default function PlayerLoginPage() {
         {email !== null && <PasswordSignIn
           key={email}
           initialEmail={email}
+          otherAccount={asOrganiser}
           title="Player sign in"
           onSignedIn={onSignedIn}
           footer={

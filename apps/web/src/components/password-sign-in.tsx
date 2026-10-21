@@ -71,7 +71,13 @@ export function PasswordSignIn({
   onSignedIn,
   footer,
   initialEmail = '',
+  otherAccount,
 }: {
+  /**
+   * When these details aren't a player's: try them as the other kind of account (an organiser)
+   * and say whether that worked, so the right email and password never fail on the wrong page.
+   */
+  otherAccount?: (email: string, password: string) => Promise<boolean>;
   /** Pre-fill, e.g. when sign-up found the email already has an account. */
   initialEmail?: string;
   title?: string;
@@ -115,8 +121,16 @@ export function PasswordSignIn({
   const login = (e: React.FormEvent) => {
     e.preventDefault();
     run(async () => {
-      const res = await loginWithPassword(email.trim(), password);
+      let res: Awaited<ReturnType<typeof loginWithPassword>>;
+      try {
+        res = await loginWithPassword(email.trim(), password);
+      } catch (err) {
+        if (password && otherAccount && (await otherAccount(email.trim(), password).catch(() => false))) return;
+        throw err;
+      }
       if ('needsPassword' in res) {
+        // No player password yet, but they typed one: it may be their organiser password.
+        if (password && otherAccount && (await otherAccount(email.trim(), password).catch(() => false))) return;
         // Their organiser added them: prove the email is theirs, then choose a password.
         setNewcomer(res.firstName);
         await emailCode();
